@@ -14,28 +14,99 @@ final class AppModel: ObservableObject {
     @Published private(set) var displayedMessage: String
     @Published private(set) var characterImage: NSImage?
     @Published private(set) var hatchPet: HatchPet?
+    @Published private(set) var characterScale: CGFloat
+    @Published private(set) var isBubbleVisible = true
+
+    var onSend: ((String) -> Void)?
+    var onCharacterScaleChange: ((CGFloat) -> Void)?
 
     private let characterURL: URL
     private let petDirectory: URL
+    private let defaults: UserDefaults
+    private var bubbleDismissTask: Task<Void, Never>?
+    private var isEditingMessage = false
 
-    init(characterURL: URL? = nil, petDirectory: URL? = nil) {
+    init(
+        characterURL: URL? = nil,
+        petDirectory: URL? = nil,
+        defaults: UserDefaults = .standard
+    ) {
         let resolvedCharacterURL = characterURL ?? Self.defaultCharacterURL
         let resolvedPetDirectory = petDirectory ?? Self.defaultPetDirectory
         self.characterURL = resolvedCharacterURL
         self.petDirectory = resolvedPetDirectory
+        self.defaults = defaults
         displayedMessage = "오늘도 같이 있자 💛"
-        hatchPet = try? HatchPetPackage.load(from: resolvedPetDirectory)
-        characterImage = hatchPet == nil ? NSImage(contentsOf: resolvedCharacterURL) : nil
+        let loadedPet = try? HatchPetPackage.load(from: resolvedPetDirectory)
+        hatchPet = loadedPet
+        characterImage = loadedPet == nil ? NSImage(contentsOf: resolvedCharacterURL) : nil
+        let savedScale = defaults.object(forKey: Self.characterScaleKey) == nil
+            ? 1
+            : defaults.double(forKey: Self.characterScaleKey)
+        characterScale = CGFloat(min(1.3, max(0.7, savedScale)))
     }
 
     func send(_ rawValue: String) {
         let message = MessageText.normalize(rawValue)
         guard !message.isEmpty else { return }
         displayedMessage = message
+        showBubble()
+        onSend?(message)
+    }
+
+    func receive(_ rawValue: String) {
+        let message = MessageText.normalize(rawValue)
+        guard !message.isEmpty else { return }
+        displayedMessage = message
+        showBubble()
     }
 
     func clearMessage() {
         displayedMessage = ""
+        isBubbleVisible = false
+        bubbleDismissTask?.cancel()
+    }
+
+    func resizeCharacter(by delta: Double) {
+        let next = ((Double(characterScale) + delta) * 10).rounded() / 10
+        setCharacterScale(CGFloat(next))
+    }
+
+    func setCharacterScale(_ scale: CGFloat) {
+        characterScale = min(1.3, max(0.7, scale))
+        defaults.set(Double(characterScale), forKey: Self.characterScaleKey)
+        onCharacterScaleChange?(characterScale)
+    }
+
+    func resetCharacterSize() {
+        setCharacterScale(1)
+    }
+
+    func showBubble() {
+        isBubbleVisible = true
+        scheduleBubbleDismissal()
+    }
+
+    func setMessageEditing(_ isEditing: Bool) {
+        isEditingMessage = isEditing
+        if isEditing {
+            bubbleDismissTask?.cancel()
+            isBubbleVisible = true
+        } else {
+            scheduleBubbleDismissal()
+        }
+    }
+
+    private func scheduleBubbleDismissal() {
+        bubbleDismissTask?.cancel()
+        guard !isEditingMessage else { return }
+
+        bubbleDismissTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.displayedMessage = ""
+            self?.isBubbleVisible = false
+        }
     }
 
     func selectCharacter(from sourceURL: URL) throws {
@@ -121,4 +192,6 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("CoupleMon", isDirectory: true)
             .appendingPathComponent("pet", isDirectory: true)
     }
+
+    private static let characterScaleKey = "characterScale"
 }

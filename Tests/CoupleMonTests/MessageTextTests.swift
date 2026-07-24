@@ -20,4 +20,17 @@ final class MessageTextTests: XCTestCase {
 
         XCTAssertEqual(model.displayedMessage, "잘 자 💛")
     }
+
+    @MainActor
+    func testCharacterScaleClampsAndPersists() {
+        let suiteName = "CoupleMonTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = AppModel(defaults: defaults)
+
+        model.setCharacterScale(2)
+
+        XCTAssertEqual(model.characterScale, 1.3)
+        XCTAssertEqual(AppModel(defaults: defaults).characterScale, 1.3)
+    }
 }

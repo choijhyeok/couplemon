@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
+    private let realtime = CoupleRealtimeService()
     private var overlayController: OverlayPanelController!
     private var menuBarController: MenuBarController!
 
@@ -13,6 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.onToggleOverlay = { [weak self] in self?.overlayController.toggle() }
         menuBarController.onChooseCharacter = { [weak self] in self?.chooseCharacter() }
         menuBarController.onChooseHatchPet = { [weak self] in self?.chooseHatchPet() }
+        menuBarController.onIncreaseCharacterSize = { [weak self] in self?.model.resizeCharacter(by: 0.1) }
+        menuBarController.onDecreaseCharacterSize = { [weak self] in self?.model.resizeCharacter(by: -0.1) }
+        menuBarController.onResetCharacterSize = { [weak self] in self?.model.resetCharacterSize() }
+        menuBarController.onConfigureRealtime = { [weak self] in self?.configureRealtime() }
+        menuBarController.onCopyRoomCode = { [weak self] in self?.copyRoomCode() }
         menuBarController.onResetCharacter = { [weak self] in
             do {
                 try self?.model.resetCharacter()
@@ -21,6 +27,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         menuBarController.onClearMessage = { [weak self] in self?.model.clearMessage() }
+        menuBarController.setCharacterScale(model.characterScale)
+
+        model.onSend = { [weak self] message in self?.realtime.send(message) }
+        model.onCharacterScaleChange = { [weak self] scale in
+            self?.menuBarController.setCharacterScale(scale)
+        }
+        realtime.onMessage = { [weak self] message in self?.model.receive(message) }
+        realtime.onStateChange = { [weak self] state in
+            self?.menuBarController.setRealtimeState(state)
+        }
+
+        if
+            let saved = RealtimeSettings.load(),
+            let settings = try? saved.validated()
+        {
+            menuBarController.setRoomCodeAvailable(true)
+            connectRealtime(using: settings)
+        }
         overlayController.show()
     }
 
@@ -64,5 +88,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let alert = NSAlert(error: error)
             alert.runModal()
         }
+    }
+
+    private func configureRealtime() {
+        let saved = RealtimeSettings.load()
+        let urlField = NSTextField(string: saved?.projectURL ?? "")
+        urlField.placeholderString = "https://프로젝트.supabase.co"
+        let keyField = NSSecureTextField(string: saved?.publishableKey ?? "")
+        keyField.placeholderString = "sb_publishable_..."
+        let roomField = NSTextField(string: saved?.roomCode ?? RealtimeSettings.makeRoomCode())
+
+        let grid = NSGridView(views: [
+            [NSTextField(labelWithString: "Project URL"), urlField],
+            [NSTextField(labelWithString: "Publishable key"), keyField],
+            [NSTextField(labelWithString: "연결 코드"), roomField],
+        ])
+        grid.column(at: 0).xPlacement = .trailing
+        grid.column(at: 1).width = 360
+        grid.rowSpacing = 8
+        grid.frame = NSRect(x: 0, y: 0, width: 470, height: 82)
+
+        let alert = NSAlert()
+        alert.messageText = "Supabase 실시간 연결"
+        alert.informativeText = "두 Mac에 같은 값과 연결 코드를 입력하세요. 메시지는 저장하지 않고 실시간으로만 전달합니다."
+        alert.accessoryView = grid
+        alert.addButton(withTitle: "저장하고 연결")
+        alert.addButton(withTitle: "취소")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        do {
+            let settings = try RealtimeSettings(
+                projectURL: urlField.stringValue,
+                publishableKey: keyField.stringValue,
+                roomCode: roomField.stringValue
+            ).validated()
+            try settings.save()
+            menuBarController.setRoomCodeAvailable(true)
+            connectRealtime(using: settings)
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+
+    private func connectRealtime(using settings: RealtimeSettings) {
+        Task { [weak self] in
+            await self?.realtime.connect(to: settings)
+        }
+    }
+
+    private func copyRoomCode() {
+        guard let code = RealtimeSettings.load()?.normalizedRoomCode else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
     }
 }

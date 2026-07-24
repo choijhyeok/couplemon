@@ -8,8 +8,19 @@ let package = Package(
     products: [
         .executable(name: "CoupleMon", targets: ["CoupleMon"]),
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/supabase/supabase-swift.git",
+            exact: "2.49.0"
+        ),
+    ],
     targets: [
-        .executableTarget(name: "CoupleMon"),
+        .executableTarget(
+            name: "CoupleMon",
+            dependencies: [
+                .product(name: "Realtime", package: "supabase-swift"),
+            ]
+        ),
         .testTarget(name: "CoupleMonTests", dependencies: ["CoupleMon"]),
     ]
 )

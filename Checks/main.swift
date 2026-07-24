@@ -3,6 +3,16 @@ import Foundation
 assert(MessageText.normalize("  보고 싶어  \n") == "보고 싶어")
 assert(MessageText.normalize("   \n").isEmpty)
 assert(MessageText.normalize(String(repeating: "a", count: 121)).count == 120)
+assert(MessageText.normalize("  보고 싶어 🥰  ") == "보고 싶어 🥰")
+
+let realtimeSettings = try RealtimeSettings(
+    projectURL: " https://example.supabase.co ",
+    publishableKey: " sb_publishable_example ",
+    roomCode: "ABCD-EFGH-JKLM-NPQR"
+).validated()
+assert(realtimeSettings.projectURL == "https://example.supabase.co")
+assert(realtimeSettings.roomCode == "ABCDEFGHJKLMNPQR")
+assert(RealtimeSettings.makeRoomCode().count == 16)
 
 let hatchPet = HatchPetManifest(
     id: "sample-pet",

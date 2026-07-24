@@ -11,7 +11,7 @@ final class OverlayPanelController {
     let panel: NSPanel
 
     init(model: AppModel) {
-        let size = CGSize(width: 320, height: 300)
+        let size = CGSize(width: 320, height: 340)
         panel = OverlayPanel(
             contentRect: CGRect(origin: .zero, size: size),
             styleMask: .borderless,
