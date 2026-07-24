@@ -68,6 +68,14 @@ open dist/CoupleMon.app
 
 스크립트는 로컬 실행용 ad-hoc 서명을 사용합니다. 외부 배포 시 Developer ID 서명과 Apple 공증으로 교체해야 합니다.
 
+## 설치 패키지 생성
+
+```bash
+./Scripts/package-installer.sh
+```
+
+생성된 `dist/CoupleMon.pkg`를 다른 Mac에서 열면 `/Applications/CoupleMon.app`에 설치됩니다. 현재 패키지는 개인 테스트용으로 서명·공증되지 않았으므로 macOS가 차단하면 Finder에서 패키지를 Control-클릭한 뒤 **열기**를 선택합니다. 경고 없이 배포하려면 Developer ID Installer 서명과 Apple 공증이 필요합니다.
+
 ## 다음 단계
 
 1. 커플 초대 코드와 기기 등록
