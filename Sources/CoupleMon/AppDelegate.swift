@@ -5,8 +5,10 @@ import UniformTypeIdentifiers
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     private let realtime = CoupleRealtimeService()
+    private let updateService = UpdateService()
     private var overlayController: OverlayPanelController!
     private var menuBarController: MenuBarController!
+    private var isCheckingForUpdates = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditMenu()
@@ -20,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.onResetCharacterSize = { [weak self] in self?.model.resetCharacterSize() }
         menuBarController.onConfigureRealtime = { [weak self] in self?.configureRealtime() }
         menuBarController.onCopyRoomCode = { [weak self] in self?.copyRoomCode() }
+        menuBarController.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
         menuBarController.onResetCharacter = { [weak self] in
             do {
                 try self?.model.resetCharacter()
@@ -166,5 +169,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let code = RealtimeSettings.load()?.normalizedRoomCode else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(code, forType: .string)
+    }
+
+    private func checkForUpdates() {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer { isCheckingForUpdates = false }
+
+            do {
+                let release = try await updateService.latestRelease()
+                guard let version = release.version else {
+                    throw UpdateService.UpdateError.invalidResponse
+                }
+                guard UpdateService.isNewer(version, than: UpdateService.currentVersion) else {
+                    showUpdateAlert(
+                        title: "최신 버전입니다",
+                        message: "현재 CoupleMon \(UpdateService.currentVersion)을 사용 중입니다."
+                    )
+                    return
+                }
+
+                let alert = NSAlert()
+                alert.messageText = "CoupleMon \(version) 업데이트"
+                alert.informativeText = "SHA-256을 검증한 GitHub Release 패키지를 내려받아 Installer를 엽니다. Developer ID 공증 전이라 macOS 보안 경고가 표시될 수 있습니다."
+                alert.addButton(withTitle: "다운로드 및 설치")
+                alert.addButton(withTitle: "취소")
+                guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+                let installerURL = try await updateService.downloadInstaller(from: release)
+                guard NSWorkspace.shared.open(installerURL) else {
+                    throw UpdateService.UpdateError.invalidDownload
+                }
+            } catch {
+                showUpdateAlert(title: "업데이트 확인 실패", message: error.localizedDescription)
+            }
+        }
+    }
+
+    private func showUpdateAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.messageText = title
+        alert.informativeText = message
+        alert.runModal()
     }
 }

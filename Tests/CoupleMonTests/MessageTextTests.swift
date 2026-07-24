@@ -22,6 +22,19 @@ final class MessageTextTests: XCTestCase {
     }
 
     @MainActor
+    func testHistoryKeepsFiveMessagesAndTheirSender() {
+        let model = AppModel()
+
+        for index in 1...6 { model.send("내 메시지 \(index)") }
+        model.receive("상대 메시지")
+
+        XCTAssertEqual(model.messageHistory.map(\.text), [
+            "내 메시지 3", "내 메시지 4", "내 메시지 5", "내 메시지 6", "상대 메시지",
+        ])
+        XCTAssertEqual(model.messageHistory.map(\.isLocal), [true, true, true, true, false])
+    }
+
+    @MainActor
     func testCharacterScaleClampsAndPersists() {
         let suiteName = "CoupleMonTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

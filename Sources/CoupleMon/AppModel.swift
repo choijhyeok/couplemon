@@ -3,6 +3,12 @@ import Combine
 
 @MainActor
 final class AppModel: ObservableObject {
+    struct ConversationMessage: Identifiable, Equatable {
+        let id = UUID()
+        let text: String
+        let isLocal: Bool
+    }
+
     enum CharacterError: LocalizedError {
         case invalidImage
 
@@ -12,6 +18,7 @@ final class AppModel: ObservableObject {
     }
 
     @Published private(set) var displayedMessage: String
+    @Published private(set) var messageHistory: [ConversationMessage] = []
     @Published private(set) var characterImage: NSImage?
     @Published private(set) var hatchPet: HatchPet?
     @Published private(set) var characterScale: CGFloat
@@ -49,20 +56,19 @@ final class AppModel: ObservableObject {
     func send(_ rawValue: String) {
         let message = MessageText.normalize(rawValue)
         guard !message.isEmpty else { return }
-        displayedMessage = message
-        showBubble()
+        record(message, isLocal: true)
         onSend?(message)
     }
 
     func receive(_ rawValue: String) {
         let message = MessageText.normalize(rawValue)
         guard !message.isEmpty else { return }
-        displayedMessage = message
-        showBubble()
+        record(message, isLocal: false)
     }
 
     func clearMessage() {
         displayedMessage = ""
+        messageHistory.removeAll()
         isBubbleVisible = false
         bubbleDismissTask?.cancel()
     }
@@ -104,9 +110,15 @@ final class AppModel: ObservableObject {
         bubbleDismissTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 5_000_000_000)
             guard !Task.isCancelled else { return }
-            self?.displayedMessage = ""
             self?.isBubbleVisible = false
         }
+    }
+
+    private func record(_ message: String, isLocal: Bool) {
+        displayedMessage = message
+        messageHistory.append(ConversationMessage(text: message, isLocal: isLocal))
+        messageHistory = Array(messageHistory.suffix(5))
+        showBubble()
     }
 
     func selectCharacter(from sourceURL: URL) throws {

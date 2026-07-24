@@ -12,6 +12,7 @@ final class MenuBarController: NSObject {
     var onResetCharacterSize: (() -> Void)?
     var onConfigureRealtime: (() -> Void)?
     var onCopyRoomCode: (() -> Void)?
+    var onCheckForUpdates: (() -> Void)?
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private var characterSizeItem: NSMenuItem!
@@ -46,6 +47,7 @@ final class MenuBarController: NSObject {
         realtimeStatusItem = NSMenuItem(title: CoupleRealtimeState.notConfigured.menuTitle, action: nil, keyEquivalent: "")
         realtimeStatusItem.isEnabled = false
         menu.addItem(realtimeStatusItem)
+        menu.addItem(item("업데이트 확인…", action: #selector(checkForUpdates)))
         menu.addItem(.separator())
         menu.addItem(item("CoupleMon 종료", action: #selector(quit), keyEquivalent: "q"))
         statusItem.menu = menu
@@ -84,5 +86,6 @@ final class MenuBarController: NSObject {
     @objc private func resetCharacterSize() { onResetCharacterSize?() }
     @objc private func configureRealtime() { onConfigureRealtime?() }
     @objc private func copyRoomCode() { onCopyRoomCode?() }
+    @objc private func checkForUpdates() { onCheckForUpdates?() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }
 }

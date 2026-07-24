@@ -15,7 +15,7 @@ struct CompanionView: View {
             resizableCharacter
         }
         .padding(12)
-        .frame(width: 320, height: 340)
+        .frame(width: 320, height: 410)
         .animation(.easeOut(duration: 0.2), value: model.isBubbleVisible)
         .onAppear { model.showBubble() }
         .onChange(of: draftIsFocused) { _, isFocused in
@@ -25,13 +25,40 @@ struct CompanionView: View {
 
     private var speechBubble: some View {
         VStack(spacing: 9) {
-            if !model.displayedMessage.isEmpty {
+            if model.messageHistory.isEmpty, !model.displayedMessage.isEmpty {
                 Text(model.displayedMessage)
                     .font(.system(size: 15, weight: .medium, design: .rounded))
                     .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                     .lineLimit(3)
                     .frame(maxWidth: .infinity)
+            } else {
+                ScrollView(.vertical) {
+                    VStack(spacing: 4) {
+                        ForEach(model.messageHistory) { message in
+                            HStack(alignment: .top, spacing: 6) {
+                                if message.isLocal { Spacer(minLength: 18) }
+                                Text(message.isLocal ? "나" : "상대")
+                                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                                    .foregroundStyle(message.isLocal ? Color.accentColor : Color.secondary)
+                                Text(message.text)
+                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .lineLimit(2)
+                                    .truncationMode(.tail)
+                                    .help(message.text)
+                                if !message.isLocal { Spacer(minLength: 18) }
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(
+                                message.isLocal ? Color.accentColor.opacity(0.12) : Color.black.opacity(0.06),
+                                in: RoundedRectangle(cornerRadius: 9)
+                            )
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: 130)
             }
 
             HStack(spacing: 8) {

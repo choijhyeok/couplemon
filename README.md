@@ -9,9 +9,11 @@
 - Codex pet v1/v2 `pet.json` + `spritesheet.webp` 선택, 검증, idle 애니메이션 재생
 - Supabase Realtime Broadcast를 통한 두 Mac 말풍선·이모지 동기화
 - macOS 이모지 선택기와 120자 말풍선 입력
+- `나`/`상대`를 구분한 최근 대화 5개 표시
 - 말풍선은 전송·수신 후 5초 뒤 자동으로 숨김
 - 캐릭터 우하단 핸들을 드래그하거나 메뉴에서 크기 70~130% 조절
 - 메뉴 막대에서 표시 전환, 캐릭터 초기화, 말풍선 삭제
+- 메뉴에서 GitHub Release 업데이트 확인·설치 패키지 실행
 - 외부 에셋 없는 기본 픽셀 하트
 
 Supabase 설정 전에는 로컬로만 동작하고, 설정 후에는 같은 연결 코드의 상대 Mac으로 실시간 전달합니다.
@@ -55,7 +57,7 @@ swift test
 Xcode 없이 Command Line Tools만 설치된 환경에서는 XCTest를 찾지 못할 수 있습니다. 이 경우 핵심 입력 규칙을 직접 검사할 수 있습니다.
 
 ```bash
-swiftc Sources/CoupleMon/MessageText.swift Sources/CoupleMon/RealtimeSettings.swift Sources/CoupleMon/HatchPetContract.swift Sources/CoupleMon/HatchPetPackage.swift Checks/main.swift -o .build/message-check
+swiftc Sources/CoupleMon/MessageText.swift Sources/CoupleMon/RealtimeSettings.swift Sources/CoupleMon/UpdateService.swift Sources/CoupleMon/HatchPetContract.swift Sources/CoupleMon/HatchPetPackage.swift Checks/main.swift -o .build/message-check
 .build/message-check
 ```
 
@@ -75,6 +77,8 @@ open dist/CoupleMon.app
 ```
 
 생성된 `dist/CoupleMon.pkg`를 다른 Mac에서 열면 `/Applications/CoupleMon.app`에 설치됩니다. 현재 패키지는 개인 테스트용으로 서명·공증되지 않았으므로 macOS가 차단하면 Finder에서 패키지를 Control-클릭한 뒤 **열기**를 선택합니다. 경고 없이 배포하려면 Developer ID Installer 서명과 Apple 공증이 필요합니다.
+
+설치 후 메뉴 막대 하트의 **업데이트 확인…**에서 최신 GitHub Release를 확인할 수 있습니다. 새 버전이 있으면 `CoupleMon.pkg`를 내려받아 macOS Installer를 엽니다.
 
 ## 다음 단계
 

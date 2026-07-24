@@ -19,6 +19,13 @@ let legacyAnonSettings = try RealtimeSettings(
 ).validated()
 assert(legacyAnonSettings.publishableKey.contains("eyJyb2xlIjoiYW5vbiJ9"))
 assert(RealtimeSettings.makeRoomCode().count == 16)
+assert(UpdateService.isNewer("0.2.0", than: "0.1.9"))
+assert(!UpdateService.isNewer("0.2.0", than: "0.2.0"))
+
+let releaseData = #"{"tag_name":"v0.2.0","html_url":"https://github.com/choijhyeok/couplemon/releases/tag/v0.2.0","assets":[{"name":"CoupleMon.pkg","browser_download_url":"https://github.com/choijhyeok/couplemon/releases/download/v0.2.0/CoupleMon.pkg","size":42}]}"#.data(using: .utf8)!
+let release = try JSONDecoder().decode(GitHubRelease.self, from: releaseData)
+assert(release.version == "0.2.0")
+assert(release.installer?.name == "CoupleMon.pkg")
 
 let hatchPet = HatchPetManifest(
     id: "sample-pet",
