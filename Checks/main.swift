@@ -12,6 +12,12 @@ let hatchPet = HatchPetManifest(
     spritesheetPath: "spritesheet.webp"
 )
 try HatchPetContract.validate(hatchPet, atlasWidth: 1536, atlasHeight: 2288)
+
+let legacyPet = try JSONDecoder().decode(
+    HatchPetManifest.self,
+    from: #"{"id":"legacy-pet","displayName":"Legacy Pet","description":"A v1 pet.","spritesheetPath":"spritesheet.webp"}"#.data(using: .utf8)!
+)
+try HatchPetContract.validate(legacyPet, atlasWidth: 1536, atlasHeight: 1872)
 assert(HatchPetContract.idleFrameIndex(elapsed: 0.279) == 0)
 assert(HatchPetContract.idleFrameIndex(elapsed: 0.280) == 1)
 assert(HatchPetContract.idleFrameIndex(elapsed: 1.100) == 0)

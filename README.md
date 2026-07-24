@@ -6,7 +6,7 @@
 
 - 모든 Space에 표시되는 투명 플로팅 패널
 - 도트 이미지 선택 및 로컬 저장
-- hatch-pet v2 `pet.json` + `spritesheet.webp` 선택, 검증, idle 애니메이션 재생
+- Codex pet v1/v2 `pet.json` + `spritesheet.webp` 선택, 검증, idle 애니메이션 재생
 - 120자 말풍선 입력 및 표시
 - 메뉴 막대에서 표시 전환, 캐릭터 초기화, 말풍선 삭제
 - 외부 에셋 없는 기본 픽셀 하트
@@ -15,13 +15,12 @@
 
 ## Codex 애니메이션 펫
 
-메뉴 막대의 **Codex 애니메이션 펫 선택…**에서 `$hatch-pet`이 만든 폴더를 선택합니다. 선택 창은 기본적으로 `~/.codex/pets`에서 열립니다.
+메뉴 막대의 **Codex 애니메이션 펫 선택…**에서 Codex가 만든 펫 폴더를 선택합니다. 선택 창은 기본적으로 `~/.codex/pets`에서 열립니다.
 
 지원 규격:
 
-- `spriteVersionNumber: 2`
-- `1536×2288` PNG 또는 WebP
-- `192×208` 셀, 8열 × 11행
+- 버전 필드가 없는 v1 `1536×1872`, 또는 `spriteVersionNumber: 2`인 v2 `1536×2288`
+- PNG 또는 WebP, `192×208` 셀
 - idle 행 6프레임과 hatch-pet 표준 타이밍
 - macOS 동작 줄이기 설정에서는 첫 프레임 고정
 

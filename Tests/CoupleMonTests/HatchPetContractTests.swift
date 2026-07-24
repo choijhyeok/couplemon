@@ -16,12 +16,19 @@ final class HatchPetContractTests: XCTestCase {
         )
     }
 
-    func testV2ContractRejectsWrongVersionSizeAndPath() {
-        let oldPet = HatchPetManifest(
+    func testContractsRejectWrongVersionSizeAndPath() {
+        let legacyPet = HatchPetManifest(
             id: manifest.id,
             displayName: manifest.displayName,
             description: manifest.description,
             spriteVersionNumber: 1,
+            spritesheetPath: manifest.spritesheetPath
+        )
+        let unsupportedPet = HatchPetManifest(
+            id: manifest.id,
+            displayName: manifest.displayName,
+            description: manifest.description,
+            spriteVersionNumber: 3,
             spritesheetPath: manifest.spritesheetPath
         )
         let unsafePet = HatchPetManifest(
@@ -32,7 +39,9 @@ final class HatchPetContractTests: XCTestCase {
             spritesheetPath: "../spritesheet.webp"
         )
 
-        XCTAssertThrowsError(try HatchPetContract.validate(oldPet, atlasWidth: 1536, atlasHeight: 2288))
+        XCTAssertNoThrow(try HatchPetContract.validate(legacyPet, atlasWidth: 1536, atlasHeight: 1872))
+        XCTAssertThrowsError(try HatchPetContract.validate(legacyPet, atlasWidth: 1536, atlasHeight: 2288))
+        XCTAssertThrowsError(try HatchPetContract.validate(unsupportedPet, atlasWidth: 1536, atlasHeight: 2288))
         XCTAssertThrowsError(try HatchPetContract.validate(manifest, atlasWidth: 1536, atlasHeight: 1872))
         XCTAssertThrowsError(try HatchPetContract.validate(unsafePet, atlasWidth: 1536, atlasHeight: 2288))
     }

@@ -53,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         picker.allowsMultipleSelection = false
         picker.canChooseDirectories = true
         picker.canChooseFiles = false
-        picker.message = "hatch-pet으로 만든 v2 펫 폴더를 선택하세요."
+        picker.message = "Codex가 만든 v1 또는 v2 펫 폴더를 선택하세요."
         picker.prompt = "펫 선택"
 
         guard picker.runModal() == .OK, let url = picker.url else { return }
