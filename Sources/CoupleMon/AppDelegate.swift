@@ -12,7 +12,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController = MenuBarController()
         menuBarController.onToggleOverlay = { [weak self] in self?.overlayController.toggle() }
         menuBarController.onChooseCharacter = { [weak self] in self?.chooseCharacter() }
-        menuBarController.onResetCharacter = { [weak self] in self?.model.resetCharacter() }
+        menuBarController.onChooseHatchPet = { [weak self] in self?.chooseHatchPet() }
+        menuBarController.onResetCharacter = { [weak self] in
+            do {
+                try self?.model.resetCharacter()
+            } catch {
+                NSAlert(error: error).runModal()
+            }
+        }
         menuBarController.onClearMessage = { [weak self] in self?.model.clearMessage() }
         overlayController.show()
     }
@@ -32,6 +39,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         do {
             try model.selectCharacter(from: url)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.runModal()
+        }
+    }
+
+    private func chooseHatchPet() {
+        let picker = NSOpenPanel()
+        let petsDirectory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/pets", isDirectory: true)
+        picker.directoryURL = FileManager.default.fileExists(atPath: petsDirectory.path) ? petsDirectory : nil
+        picker.allowsMultipleSelection = false
+        picker.canChooseDirectories = true
+        picker.canChooseFiles = false
+        picker.message = "hatch-pet으로 만든 v2 펫 폴더를 선택하세요."
+        picker.prompt = "펫 선택"
+
+        guard picker.runModal() == .OK, let url = picker.url else { return }
+
+        do {
+            try model.selectHatchPet(from: url)
         } catch {
             let alert = NSAlert(error: error)
             alert.runModal()

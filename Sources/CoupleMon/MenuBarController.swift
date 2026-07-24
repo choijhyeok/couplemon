@@ -4,6 +4,7 @@ import AppKit
 final class MenuBarController: NSObject {
     var onToggleOverlay: (() -> Void)?
     var onChooseCharacter: (() -> Void)?
+    var onChooseHatchPet: (() -> Void)?
     var onResetCharacter: (() -> Void)?
     var onClearMessage: (() -> Void)?
 
@@ -16,7 +17,8 @@ final class MenuBarController: NSObject {
         let menu = NSMenu()
         menu.addItem(item("보이기 / 숨기기", action: #selector(toggleOverlay)))
         menu.addItem(.separator())
-        menu.addItem(item("캐릭터 이미지 선택…", action: #selector(chooseCharacter)))
+        menu.addItem(item("Codex 애니메이션 펫 선택…", action: #selector(chooseHatchPet)))
+        menu.addItem(item("일반 이미지 선택…", action: #selector(chooseCharacter)))
         menu.addItem(item("기본 캐릭터로 되돌리기", action: #selector(resetCharacter)))
         menu.addItem(item("말풍선 지우기", action: #selector(clearMessage)))
         menu.addItem(.separator())
@@ -32,6 +34,7 @@ final class MenuBarController: NSObject {
 
     @objc private func toggleOverlay() { onToggleOverlay?() }
     @objc private func chooseCharacter() { onChooseCharacter?() }
+    @objc private func chooseHatchPet() { onChooseHatchPet?() }
     @objc private func resetCharacter() { onResetCharacter?() }
     @objc private func clearMessage() { onClearMessage?() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }

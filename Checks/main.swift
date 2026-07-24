@@ -3,4 +3,36 @@ import Foundation
 assert(MessageText.normalize("  보고 싶어  \n") == "보고 싶어")
 assert(MessageText.normalize("   \n").isEmpty)
 assert(MessageText.normalize(String(repeating: "a", count: 121)).count == 120)
-print("MessageText self-check passed")
+
+let hatchPet = HatchPetManifest(
+    id: "sample-pet",
+    displayName: "Sample Pet",
+    description: "A test pet.",
+    spriteVersionNumber: 2,
+    spritesheetPath: "spritesheet.webp"
+)
+try HatchPetContract.validate(hatchPet, atlasWidth: 1536, atlasHeight: 2288)
+assert(HatchPetContract.idleFrameIndex(elapsed: 0.279) == 0)
+assert(HatchPetContract.idleFrameIndex(elapsed: 0.280) == 1)
+assert(HatchPetContract.idleFrameIndex(elapsed: 1.100) == 0)
+
+let unsafePet = HatchPetManifest(
+    id: hatchPet.id,
+    displayName: hatchPet.displayName,
+    description: hatchPet.description,
+    spriteVersionNumber: 2,
+    spritesheetPath: "../spritesheet.webp"
+)
+do {
+    try HatchPetContract.validateManifest(unsafePet)
+    assertionFailure("Unsafe spritesheet path was accepted")
+} catch HatchPetError.unsafeSpritesheetPath {
+    // Expected.
+}
+
+if let petDirectory = CommandLine.arguments.dropFirst().first {
+    let pet = try HatchPetPackage.load(from: URL(fileURLWithPath: petDirectory))
+    assert(pet.idleFrames.count == 6)
+    assert(pet.idleFrames.allSatisfy { $0.size.width == 192 && $0.size.height == 208 })
+}
+print("CoupleMon self-check passed")

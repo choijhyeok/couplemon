@@ -58,7 +58,10 @@ struct CompanionView: View {
 
     @ViewBuilder
     private var character: some View {
-        if let image = model.characterImage {
+        if let pet = model.hatchPet {
+            AnimatedHatchPetView(pet: pet)
+                .id(pet.manifest.id)
+        } else if let image = model.characterImage {
             Image(nsImage: image)
                 .resizable()
                 .interpolation(.none)
@@ -78,6 +81,27 @@ struct CompanionView: View {
         if !MessageText.normalize(draft).isEmpty {
             draft = ""
         }
+    }
+}
+
+private struct AnimatedHatchPetView: View {
+    let pet: HatchPet
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var startedAt = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            let elapsed = timeline.date.timeIntervalSince(startedAt)
+            let frameIndex = reduceMotion ? 0 : HatchPetContract.idleFrameIndex(elapsed: elapsed)
+
+            Image(nsImage: pet.idleFrames[frameIndex])
+                .resizable()
+                .interpolation(.none)
+                .scaledToFit()
+                .frame(width: 150, height: 150)
+        }
+        .accessibilityLabel(pet.manifest.displayName)
     }
 }
 
