@@ -11,7 +11,7 @@ struct RealtimeSettings: Codable, Equatable {
             case .invalidProjectURL:
                 "Supabase Project URL은 https 주소여야 합니다."
             case .invalidPublishableKey:
-                "sb_publishable_ 로 시작하는 Publishable key를 입력하세요."
+                "Publishable key 또는 legacy anon key를 입력하세요."
             case .invalidRoomCode:
                 "연결 코드는 영문 대문자와 숫자 16~32자여야 합니다."
             }
@@ -42,7 +42,7 @@ struct RealtimeSettings: Codable, Equatable {
         else {
             throw SettingsError.invalidProjectURL
         }
-        guard keyValue.hasPrefix("sb_publishable_") else {
+        guard Self.isClientKey(keyValue) else {
             throw SettingsError.invalidPublishableKey
         }
         guard (16...32).contains(codeValue.count) else {
@@ -67,6 +67,23 @@ struct RealtimeSettings: Codable, Equatable {
 
     static func makeRoomCode() -> String {
         String((0..<16).map { _ in roomAlphabet.randomElement()! })
+    }
+
+    private static func isClientKey(_ value: String) -> Bool {
+        if value.hasPrefix("sb_publishable_") { return true }
+
+        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return false }
+        var payload = String(parts[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        payload += String(repeating: "=", count: (4 - payload.count % 4) % 4)
+
+        guard
+            let data = Data(base64Encoded: payload),
+            let claims = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        return claims["role"] as? String == "anon"
     }
 }
 

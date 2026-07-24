@@ -12,6 +12,12 @@ let realtimeSettings = try RealtimeSettings(
 ).validated()
 assert(realtimeSettings.projectURL == "https://example.supabase.co")
 assert(realtimeSettings.roomCode == "ABCDEFGHJKLMNPQR")
+let legacyAnonSettings = try RealtimeSettings(
+    projectURL: "https://example.supabase.co",
+    publishableKey: "e30.eyJyb2xlIjoiYW5vbiJ9.x",
+    roomCode: "ABCDEFGHJKLMNPQR"
+).validated()
+assert(legacyAnonSettings.publishableKey.contains("eyJyb2xlIjoiYW5vbiJ9"))
 assert(RealtimeSettings.makeRoomCode().count == 16)
 
 let hatchPet = HatchPetManifest(

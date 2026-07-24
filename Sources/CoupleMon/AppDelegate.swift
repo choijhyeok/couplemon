@@ -95,12 +95,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let urlField = NSTextField(string: saved?.projectURL ?? "")
         urlField.placeholderString = "https://프로젝트.supabase.co"
         let keyField = NSSecureTextField(string: saved?.publishableKey ?? "")
-        keyField.placeholderString = "sb_publishable_..."
+        keyField.placeholderString = "sb_publishable_... 또는 anon JWT"
         let roomField = NSTextField(string: saved?.roomCode ?? RealtimeSettings.makeRoomCode())
 
         let grid = NSGridView(views: [
             [NSTextField(labelWithString: "Project URL"), urlField],
-            [NSTextField(labelWithString: "Publishable key"), keyField],
+            [NSTextField(labelWithString: "Client key"), keyField],
             [NSTextField(labelWithString: "연결 코드"), roomField],
         ])
         grid.column(at: 0).xPlacement = .trailing

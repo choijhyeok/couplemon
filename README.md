@@ -18,7 +18,7 @@ Supabase 설정 전에는 로컬로만 동작하고, 설정 후에는 같은 연
 
 ## 두 Mac 실시간 연결
 
-1. Supabase 무료 프로젝트를 만들고 Connect 화면에서 Project URL과 `sb_publishable_...` key를 복사합니다.
+1. Supabase 무료 프로젝트를 만들고 Connect 화면에서 Project URL과 `sb_publishable_...` key를 복사합니다. 기존 프로젝트의 legacy `anon` key도 지원합니다.
 2. 각 Mac에서 **실시간 연결 설정…**을 열어 같은 URL, key, 연결 코드를 입력합니다.
 3. 한쪽에서 **연결 코드 복사** 후 상대에게 전달하면 편합니다.
 
