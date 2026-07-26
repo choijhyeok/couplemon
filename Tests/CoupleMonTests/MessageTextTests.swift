@@ -35,6 +35,17 @@ final class MessageTextTests: XCTestCase {
     }
 
     @MainActor
+    func testDismissChatInputHidesBubbleAndEndsEditing() {
+        let model = AppModel()
+        model.setMessageEditing(true)
+
+        model.dismissChatInput()
+
+        XCTAssertFalse(model.isMessageEditing)
+        XCTAssertFalse(model.isBubbleVisible)
+    }
+
+    @MainActor
     func testCharacterScaleClampsAndPersists() {
         let suiteName = "CoupleMonTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

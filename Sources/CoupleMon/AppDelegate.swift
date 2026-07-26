@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
         menuBarController.onToggleTodoList = { [weak self] in self?.toggleTodoList() }
         menuBarController.onToggleTodoVisibility = { [weak self] in self?.toggleTodoVisibility() }
-        menuBarController.onFocusChatInput = { [weak self] in self?.focusChatInput() }
+        menuBarController.onToggleChatInput = { [weak self] in self?.toggleChatInput() }
         menuBarController.onResetCharacter = { [weak self] in
             do {
                 try self?.model.resetCharacter()
@@ -194,7 +194,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.setTodoEnabled(model.isTodoEnabled)
     }
 
-    private func focusChatInput() {
+    private func toggleChatInput() {
+        if model.isEditingMessage {
+            overlayController.dismissChatInput()
+            model.dismissChatInput()
+            return
+        }
         overlayController.focusChatInput()
         DispatchQueue.main.async { [weak self] in self?.model.requestChatFocus() }
     }
@@ -232,7 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
                 Task { @MainActor in
                     if hotKeyID.id == 1 {
-                        appDelegate.focusChatInput()
+                        appDelegate.toggleChatInput()
                     } else if hotKeyID.id == 2 {
                         appDelegate.toggleTodoVisibility()
                     }

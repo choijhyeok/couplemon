@@ -43,7 +43,7 @@ final class AppModel: ObservableObject {
     private let bundledPetDirectory: URL?
     private let defaults: UserDefaults
     private var bubbleDismissTask: Task<Void, Never>?
-    private var isEditingMessage = false
+    private(set) var isEditingMessage = false
 
     init(
         characterURL: URL? = nil,
@@ -127,6 +127,12 @@ final class AppModel: ObservableObject {
     func requestChatFocus() {
         showBubble()
         chatFocusRequest += 1
+    }
+
+    func dismissChatInput() {
+        isEditingMessage = false
+        isBubbleVisible = false
+        bubbleDismissTask?.cancel()
     }
 
     func resizeCharacter(by delta: Double) {

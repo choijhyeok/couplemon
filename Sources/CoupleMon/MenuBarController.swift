@@ -9,7 +9,7 @@ final class MenuBarController: NSObject {
     var onClearMessage: (() -> Void)?
     var onToggleTodoList: (() -> Void)?
     var onToggleTodoVisibility: (() -> Void)?
-    var onFocusChatInput: (() -> Void)?
+    var onToggleChatInput: (() -> Void)?
     var onIncreaseCharacterSize: (() -> Void)?
     var onDecreaseCharacterSize: (() -> Void)?
     var onResetCharacterSize: (() -> Void)?
@@ -46,7 +46,7 @@ final class MenuBarController: NSObject {
         todoListItem = item("Todo List", action: #selector(toggleTodoList))
         menu.addItem(todoListItem)
         menu.addItem(item("Todo List 열기 / 닫기 (⌃⌥T)", action: #selector(toggleTodoVisibility)))
-        menu.addItem(item("채팅 입력창 열기 (⌃⌥Space)", action: #selector(focusChatInput)))
+        menu.addItem(item("채팅 입력창 열기 / 닫기 (⌃⌥Space)", action: #selector(toggleChatInput)))
         menu.addItem(.separator())
         menu.addItem(item("실시간 연결 설정…", action: #selector(configureRealtime)))
         copyRoomCodeItem = item("연결 코드 복사", action: #selector(copyRoomCode))
@@ -95,7 +95,7 @@ final class MenuBarController: NSObject {
     @objc private func clearMessage() { onClearMessage?() }
     @objc private func toggleTodoList() { onToggleTodoList?() }
     @objc private func toggleTodoVisibility() { onToggleTodoVisibility?() }
-    @objc private func focusChatInput() { onFocusChatInput?() }
+    @objc private func toggleChatInput() { onToggleChatInput?() }
     @objc private func increaseCharacterSize() { onIncreaseCharacterSize?() }
     @objc private func decreaseCharacterSize() { onDecreaseCharacterSize?() }
     @objc private func resetCharacterSize() { onResetCharacterSize?() }

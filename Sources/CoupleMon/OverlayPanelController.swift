@@ -55,4 +55,8 @@ final class OverlayPanelController {
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
+
+    func dismissChatInput() {
+        panel.makeFirstResponder(nil)
+    }
 }
