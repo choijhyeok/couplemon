@@ -6,7 +6,10 @@ struct CompanionView: View {
     @State private var draft = ""
     @State private var resizeStartScale: CGFloat?
     @State private var todoDraft = ""
+    @State private var isEmoticonPickerPresented = false
     @FocusState private var draftIsFocused: Bool
+
+    private let basicEmoji = ["😀", "🥰", "😍", "😘", "😂", "😭", "👍", "❤️", "💛", "✨", "🎉", "🔥"]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -114,11 +117,7 @@ struct CompanionView: View {
     private var speechBubble: some View {
         VStack(spacing: 9) {
             if model.messageHistory.isEmpty, !model.displayedMessage.isEmpty {
-                Text(model.displayedMessage)
-                    .font(.system(size: 15, weight: .medium, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(3)
+                messageContent(model.displayedMessage, emoticonSize: 84)
                     .frame(maxWidth: .infinity)
             } else {
                 ScrollView(.vertical) {
@@ -129,11 +128,7 @@ struct CompanionView: View {
                                 Text(message.isLocal ? "나" : "상대")
                                     .font(.system(size: 10, weight: .bold, design: .rounded))
                                     .foregroundStyle(message.isLocal ? Color.accentColor : Color.secondary)
-                                Text(message.text)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
-                                    .lineLimit(2)
-                                    .truncationMode(.tail)
-                                    .help(message.text)
+                                messageContent(message.text, emoticonSize: 54)
                                 if !message.isLocal { Spacer(minLength: 18) }
                             }
                             .padding(.horizontal, 8)
@@ -150,12 +145,15 @@ struct CompanionView: View {
             }
 
             HStack(spacing: 8) {
-                Button(action: showEmojiPicker) {
+                Button { isEmoticonPickerPresented.toggle() } label: {
                     Image(systemName: "face.smiling")
                         .font(.system(size: 17))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("이모티콘 선택")
+                .popover(isPresented: $isEmoticonPickerPresented, arrowEdge: .bottom) {
+                    emoticonPicker
+                }
 
                 TextField("한마디 보내기", text: $draft)
                     .textFieldStyle(.plain)
@@ -268,10 +266,109 @@ struct CompanionView: View {
         if !MessageText.normalize(todoDraft).isEmpty { todoDraft = "" }
     }
 
-    private func showEmojiPicker() {
-        draftIsFocused = true
-        DispatchQueue.main.async {
+    private var emoticonPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("CoupleMon 특전")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+
+            ScrollView(.vertical) {
+                LazyVGrid(columns: Array(repeating: GridItem(.fixed(68)), count: 3), spacing: 8) {
+                    ForEach(CoupleMonEmoticon.allCases) { emoticon in
+                        Button { send(emoticon) } label: {
+                            VStack(spacing: 4) {
+                                emoticonImage(emoticon, size: 54)
+                                Text(emoticon.title)
+                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                            }
+                            .frame(width: 68)
+                            .padding(.vertical, 6)
+                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(emoticon.accessibilityLabel)
+                    }
+                }
+            }
+            .frame(maxHeight: 300)
+
+            Divider()
+            Text("기본 이모지")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+
+            LazyVGrid(columns: Array(repeating: GridItem(.fixed(30)), count: 6), spacing: 8) {
+                ForEach(basicEmoji, id: \.self) { emoji in
+                    Button(emoji) { insert(emoji) }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 20))
+                        .frame(width: 30, height: 30)
+                        .accessibilityLabel("\(emoji) 이모지")
+                }
+            }
+
+            Button("macOS 전체 이모지 열기", systemImage: "character.book.closed") {
+                showSystemEmojiPicker()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .medium, design: .rounded))
+        }
+        .padding(14)
+        .frame(width: 252)
+    }
+
+    @ViewBuilder
+    private func messageContent(_ text: String, emoticonSize: CGFloat) -> some View {
+        if let emoticon = CoupleMonEmoticon(messageValue: text) {
+            emoticonImage(emoticon, size: emoticonSize)
+        } else {
+            Text(text)
+                .font(.system(size: 13, weight: .medium, design: .rounded))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+                .truncationMode(.tail)
+                .help(text)
+        }
+    }
+
+    @ViewBuilder
+    private func emoticonImage(_ emoticon: CoupleMonEmoticon, size: CGFloat) -> some View {
+        if let image = emoticon.image {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: size, height: size)
+                .accessibilityLabel(emoticon.accessibilityLabel)
+        } else {
+            Text(emoticon.title)
+                .frame(width: size, height: size)
+        }
+    }
+
+    private func send(_ emoticon: CoupleMonEmoticon) {
+        model.send(emoticon.messageValue)
+        isEmoticonPickerPresented = false
+        restoreDraftFocus()
+    }
+
+    private func insert(_ emoji: String) {
+        guard draft.count < MessageText.maxLength else { return }
+        draft.append(contentsOf: emoji)
+        isEmoticonPickerPresented = false
+        restoreDraftFocus()
+    }
+
+    private func showSystemEmojiPicker() {
+        isEmoticonPickerPresented = false
+        NSApp.activate(ignoringOtherApps: true)
+        restoreDraftFocus {
             NSApp.orderFrontCharacterPalette(nil)
+        }
+    }
+
+    private func restoreDraftFocus(_ action: (() -> Void)? = nil) {
+        DispatchQueue.main.async {
+            draftIsFocused = true
+            DispatchQueue.main.async { action?() }
         }
     }
 }

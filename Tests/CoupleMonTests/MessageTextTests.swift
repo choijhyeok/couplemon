@@ -45,6 +45,14 @@ final class MessageTextTests: XCTestCase {
         XCTAssertFalse(model.isBubbleVisible)
     }
 
+    func testCoupleMonEmoticonMessageRoundTrips() {
+        for emoticon in CoupleMonEmoticon.allCases {
+            XCTAssertEqual(CoupleMonEmoticon(messageValue: emoticon.messageValue), emoticon)
+        }
+        XCTAssertEqual(CoupleMonEmoticon(messageValue: "😀"), nil)
+        XCTAssertTrue(CoupleMonEmoticon.allCases.allSatisfy { $0.image != nil })
+    }
+
     @MainActor
     func testCharacterScaleClampsAndPersists() {
         let suiteName = "CoupleMonTests.\(UUID().uuidString)"

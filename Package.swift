@@ -19,7 +19,8 @@ let package = Package(
             name: "CoupleMon",
             dependencies: [
                 .product(name: "Realtime", package: "supabase-swift"),
-            ]
+            ],
+            resources: [.process("Resources")]
         ),
         .testTarget(name: "CoupleMonTests", dependencies: ["CoupleMon"]),
     ]
