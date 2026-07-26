@@ -41,7 +41,7 @@ final class MessageTextTests: XCTestCase {
 
         model.dismissChatInput()
 
-        XCTAssertFalse(model.isMessageEditing)
+        XCTAssertFalse(model.isEditingMessage)
         XCTAssertFalse(model.isBubbleVisible)
     }
 
