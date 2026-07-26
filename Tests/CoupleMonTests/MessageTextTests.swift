@@ -62,6 +62,25 @@ final class MessageTextTests: XCTestCase {
         XCTAssertEqual(model.hatchPet?.manifest.id, "kt-ribbon-pet")
     }
 
+    @MainActor
+    func testTodoPersistsCompletionAndVisibilitySetting() {
+        let suiteName = "CoupleMonTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = AppModel(defaults: defaults)
+
+        model.setTodoEnabled(true)
+        model.addTodo("  장보기  ")
+        model.addTodo("삭제할 일")
+        model.toggleTodo(id: model.todoItems[0].id)
+        model.deleteTodo(id: model.todoItems[1].id)
+
+        let restored = AppModel(defaults: defaults)
+        XCTAssertTrue(restored.isTodoEnabled)
+        XCTAssertEqual(restored.todoItems.map(\.text), ["장보기"])
+        XCTAssertTrue(restored.todoItems[0].isCompleted)
+    }
+
     private static var defaultPetDirectory: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

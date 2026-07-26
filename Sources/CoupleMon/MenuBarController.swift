@@ -7,6 +7,8 @@ final class MenuBarController: NSObject {
     var onChooseHatchPet: (() -> Void)?
     var onResetCharacter: (() -> Void)?
     var onClearMessage: (() -> Void)?
+    var onToggleTodoList: (() -> Void)?
+    var onFocusChatInput: (() -> Void)?
     var onIncreaseCharacterSize: (() -> Void)?
     var onDecreaseCharacterSize: (() -> Void)?
     var onResetCharacterSize: (() -> Void)?
@@ -18,6 +20,7 @@ final class MenuBarController: NSObject {
     private var characterSizeItem: NSMenuItem!
     private var realtimeStatusItem: NSMenuItem!
     private var copyRoomCodeItem: NSMenuItem!
+    private var todoListItem: NSMenuItem!
 
     override init() {
         super.init()
@@ -39,6 +42,9 @@ final class MenuBarController: NSObject {
         menu.setSubmenu(sizeMenu, for: characterSizeItem)
 
         menu.addItem(item("말풍선 지우기", action: #selector(clearMessage)))
+        todoListItem = item("Todo List", action: #selector(toggleTodoList))
+        menu.addItem(todoListItem)
+        menu.addItem(item("채팅 입력창 열기 (⌃⌥Space)", action: #selector(focusChatInput)))
         menu.addItem(.separator())
         menu.addItem(item("실시간 연결 설정…", action: #selector(configureRealtime)))
         copyRoomCodeItem = item("연결 코드 복사", action: #selector(copyRoomCode))
@@ -70,6 +76,10 @@ final class MenuBarController: NSObject {
         copyRoomCodeItem.isEnabled = isAvailable
     }
 
+    func setTodoEnabled(_ isEnabled: Bool) {
+        todoListItem.state = isEnabled ? .on : .off
+    }
+
     private func item(_ title: String, action: Selector, keyEquivalent: String = "") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
@@ -81,6 +91,8 @@ final class MenuBarController: NSObject {
     @objc private func chooseHatchPet() { onChooseHatchPet?() }
     @objc private func resetCharacter() { onResetCharacter?() }
     @objc private func clearMessage() { onClearMessage?() }
+    @objc private func toggleTodoList() { onToggleTodoList?() }
+    @objc private func focusChatInput() { onFocusChatInput?() }
     @objc private func increaseCharacterSize() { onIncreaseCharacterSize?() }
     @objc private func decreaseCharacterSize() { onDecreaseCharacterSize?() }
     @objc private func resetCharacterSize() { onResetCharacterSize?() }

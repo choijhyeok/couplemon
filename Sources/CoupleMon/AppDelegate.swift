@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import UniformTypeIdentifiers
 
 @MainActor
@@ -9,6 +10,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var overlayController: OverlayPanelController!
     private var menuBarController: MenuBarController!
     private var isCheckingForUpdates = false
+    private var chatHotKey: EventHotKeyRef?
+    private var chatHotKeyHandler: EventHandlerRef?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditMenu()
@@ -23,6 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.onConfigureRealtime = { [weak self] in self?.configureRealtime() }
         menuBarController.onCopyRoomCode = { [weak self] in self?.copyRoomCode() }
         menuBarController.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
+        menuBarController.onToggleTodoList = { [weak self] in self?.toggleTodoList() }
+        menuBarController.onFocusChatInput = { [weak self] in self?.focusChatInput() }
         menuBarController.onResetCharacter = { [weak self] in
             do {
                 try self?.model.resetCharacter()
@@ -32,10 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuBarController.onClearMessage = { [weak self] in self?.model.clearMessage() }
         menuBarController.setCharacterScale(model.characterScale)
+        menuBarController.setTodoEnabled(model.isTodoEnabled)
 
         model.onSend = { [weak self] message in self?.realtime.send(message) }
         model.onCharacterScaleChange = { [weak self] scale in
             self?.menuBarController.setCharacterScale(scale)
+        }
+        model.onTodoVisibilityChange = { [weak self] isVisible in
+            self?.overlayController.setTodoVisible(isVisible)
         }
         realtime.onMessage = { [weak self] message in self?.model.receive(message) }
         realtime.onStateChange = { [weak self] state in
@@ -49,7 +58,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarController.setRoomCodeAvailable(true)
             connectRealtime(using: settings)
         }
+        installChatHotKey()
         overlayController.show()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let chatHotKey { UnregisterEventHotKey(chatHotKey) }
+        if let chatHotKeyHandler { RemoveEventHandler(chatHotKeyHandler) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -169,6 +184,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let code = RealtimeSettings.load()?.normalizedRoomCode else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(code, forType: .string)
+    }
+
+    private func toggleTodoList() {
+        model.setTodoEnabled(!model.isTodoEnabled)
+        menuBarController.setTodoEnabled(model.isTodoEnabled)
+    }
+
+    private func focusChatInput() {
+        overlayController.focusChatInput()
+        DispatchQueue.main.async { [weak self] in self?.model.requestChatFocus() }
+    }
+
+    private func installChatHotKey() {
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, _, userData in
+                guard let userData else { return OSStatus(eventNotHandledErr) }
+                let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
+                Task { @MainActor in appDelegate.focusChatInput() }
+                return noErr
+            },
+            1,
+            &eventType,
+            Unmanaged.passUnretained(self).toOpaque(),
+            &chatHotKeyHandler
+        )
+        let hotKeyID = EventHotKeyID(signature: 0x434D4F4E, id: 1)
+        RegisterEventHotKey(
+            UInt32(kVK_Space),
+            UInt32(controlKey | optionKey),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &chatHotKey
+        )
     }
 
     private func checkForUpdates() {

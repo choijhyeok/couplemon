@@ -5,9 +5,25 @@ struct CompanionView: View {
     @ObservedObject var model: AppModel
     @State private var draft = ""
     @State private var resizeStartScale: CGFloat?
+    @State private var todoDraft = ""
     @FocusState private var draftIsFocused: Bool
 
     var body: some View {
+        HStack(spacing: 0) {
+            if model.isTodoVisible {
+                todoList
+                    .padding(12)
+                    .frame(width: 280, height: 410)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            }
+            companion
+        }
+        .frame(width: model.isTodoVisible ? 600 : 320, height: 410, alignment: .trailing)
+        .animation(.easeOut(duration: 0.2), value: model.isTodoVisible)
+        .onChange(of: model.chatFocusRequest) { _, _ in draftIsFocused = true }
+    }
+
+    private var companion: some View {
         VStack(spacing: 4) {
             speechBubble
                 .opacity(model.isBubbleVisible ? 1 : 0)
@@ -21,6 +37,78 @@ struct CompanionView: View {
         .onChange(of: draftIsFocused) { _, isFocused in
             model.setMessageEditing(isFocused)
         }
+    }
+
+    private var todoList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("TODO", systemImage: "doc.text.fill")
+                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                Spacer()
+                Text("\(model.todoItems.filter(\.isCompleted).count)/\(model.todoItems.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    if model.todoItems.isEmpty {
+                        Text("할 일을 추가해 보세요")
+                            .font(.system(size: 13, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 70)
+                    }
+                    ForEach(model.todoItems) { item in
+                        HStack(alignment: .top, spacing: 8) {
+                            Button { model.toggleTodo(id: item.id) } label: {
+                                Image(systemName: item.isCompleted ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(item.isCompleted ? Color.accentColor : Color.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(item.isCompleted ? "완료 취소" : "완료")
+
+                            Text(item.text)
+                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                                .strikethrough(item.isCompleted)
+                                .foregroundStyle(item.isCompleted ? .secondary : .primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            Button { model.deleteTodo(id: item.id) } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("\(item.text) 삭제")
+                            .help("삭제")
+                        }
+                        .padding(9)
+                        .background(.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                TextField("할 일 추가", text: $todoDraft)
+                    .textFieldStyle(.plain)
+                    .onSubmit(addTodo)
+                Button(action: addTodo) {
+                    Image(systemName: "plus.circle.fill")
+                        .font(.system(size: 18))
+                }
+                .buttonStyle(.plain)
+                .disabled(MessageText.normalize(todoDraft).isEmpty)
+                .accessibilityLabel("할 일 추가")
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(.black.opacity(0.06), in: Capsule())
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
+        .overlay { RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.6), lineWidth: 1) }
+        .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
     }
 
     private var speechBubble: some View {
@@ -126,6 +214,22 @@ struct CompanionView: View {
             .contentShape(Rectangle())
             .onTapGesture { model.showBubble() }
             .accessibilityAction { model.showBubble() }
+            .overlay(alignment: .leading) {
+                if model.isTodoEnabled {
+                    Button { model.toggleTodoVisibility() } label: {
+                        Image(systemName: model.isTodoVisible ? "doc.text.fill" : "doc.text")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(model.isTodoVisible ? Color.accentColor : .black.opacity(0.62), in: Circle())
+                            .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: -42)
+                    .accessibilityLabel(model.isTodoVisible ? "Todo List 닫기" : "Todo List 열기")
+                    .help(model.isTodoVisible ? "Todo List 닫기" : "Todo List 열기")
+                }
+            }
             .overlay(alignment: .bottomTrailing) {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.system(size: 11, weight: .bold))
@@ -156,8 +260,12 @@ struct CompanionView: View {
         model.send(draft)
         if !MessageText.normalize(draft).isEmpty {
             draft = ""
-            draftIsFocused = false
         }
+    }
+
+    private func addTodo() {
+        model.addTodo(todoDraft)
+        if !MessageText.normalize(todoDraft).isEmpty { todoDraft = "" }
     }
 
     private func showEmojiPicker() {

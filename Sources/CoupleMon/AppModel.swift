@@ -9,6 +9,12 @@ final class AppModel: ObservableObject {
         let isLocal: Bool
     }
 
+    struct TodoItem: Codable, Identifiable, Equatable {
+        let id: UUID
+        let text: String
+        var isCompleted: Bool
+    }
+
     enum CharacterError: LocalizedError {
         case invalidImage
 
@@ -23,9 +29,14 @@ final class AppModel: ObservableObject {
     @Published private(set) var hatchPet: HatchPet?
     @Published private(set) var characterScale: CGFloat
     @Published private(set) var isBubbleVisible = true
+    @Published private(set) var todoItems: [TodoItem]
+    @Published private(set) var isTodoEnabled: Bool
+    @Published private(set) var isTodoVisible = false
+    @Published private(set) var chatFocusRequest = 0
 
     var onSend: ((String) -> Void)?
     var onCharacterScaleChange: ((CGFloat) -> Void)?
+    var onTodoVisibilityChange: ((Bool) -> Void)?
 
     private let characterURL: URL
     private let petDirectory: URL
@@ -55,6 +66,9 @@ final class AppModel: ObservableObject {
             : nil
         hatchPet = loadedPet ?? defaultPet
         characterImage = loadedImage
+        todoItems = defaults.data(forKey: Self.todoItemsKey)
+            .flatMap { try? JSONDecoder().decode([TodoItem].self, from: $0) } ?? []
+        isTodoEnabled = defaults.bool(forKey: Self.todoEnabledKey)
         let savedScale = defaults.object(forKey: Self.characterScaleKey) == nil
             ? 1
             : defaults.double(forKey: Self.characterScaleKey)
@@ -79,6 +93,40 @@ final class AppModel: ObservableObject {
         messageHistory.removeAll()
         isBubbleVisible = false
         bubbleDismissTask?.cancel()
+    }
+
+    func addTodo(_ rawValue: String) {
+        let text = MessageText.normalize(rawValue)
+        guard !text.isEmpty else { return }
+        todoItems.append(TodoItem(id: UUID(), text: text, isCompleted: false))
+        saveTodos()
+    }
+
+    func toggleTodo(id: UUID) {
+        guard let index = todoItems.firstIndex(where: { $0.id == id }) else { return }
+        todoItems[index].isCompleted.toggle()
+        saveTodos()
+    }
+
+    func deleteTodo(id: UUID) {
+        todoItems.removeAll { $0.id == id }
+        saveTodos()
+    }
+
+    func setTodoEnabled(_ isEnabled: Bool) {
+        isTodoEnabled = isEnabled
+        defaults.set(isEnabled, forKey: Self.todoEnabledKey)
+        if !isEnabled { setTodoVisible(false) }
+    }
+
+    func toggleTodoVisibility() {
+        guard isTodoEnabled else { return }
+        setTodoVisible(!isTodoVisible)
+    }
+
+    func requestChatFocus() {
+        showBubble()
+        chatFocusRequest += 1
     }
 
     func resizeCharacter(by delta: Double) {
@@ -127,6 +175,17 @@ final class AppModel: ObservableObject {
         messageHistory.append(ConversationMessage(text: message, isLocal: isLocal))
         messageHistory = Array(messageHistory.suffix(5))
         showBubble()
+    }
+
+    private func setTodoVisible(_ isVisible: Bool) {
+        self.isTodoVisible = isVisible
+        onTodoVisibilityChange?(isVisible)
+    }
+
+    private func saveTodos() {
+        if let data = try? JSONEncoder().encode(todoItems) {
+            defaults.set(data, forKey: Self.todoItemsKey)
+        }
     }
 
     func selectCharacter(from sourceURL: URL) throws {
@@ -214,4 +273,6 @@ final class AppModel: ObservableObject {
     }
 
     private static let characterScaleKey = "characterScale"
+    private static let todoItemsKey = "todoItems"
+    private static let todoEnabledKey = "todoEnabled"
 }

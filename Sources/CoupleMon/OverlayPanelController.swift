@@ -9,11 +9,12 @@ final class OverlayPanel: NSPanel {
 @MainActor
 final class OverlayPanelController {
     let panel: NSPanel
+    private let compactSize = CGSize(width: 320, height: 410)
+    private let expandedSize = CGSize(width: 600, height: 410)
 
     init(model: AppModel) {
-        let size = CGSize(width: 320, height: 410)
         panel = OverlayPanel(
-            contentRect: CGRect(origin: .zero, size: size),
+            contentRect: CGRect(origin: .zero, size: compactSize),
             styleMask: .borderless,
             backing: .buffered,
             defer: false
@@ -30,7 +31,7 @@ final class OverlayPanelController {
 
         let visibleFrame = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1440, height: 900)
         panel.setFrameOrigin(
-            CGPoint(x: visibleFrame.maxX - size.width - 24, y: visibleFrame.minY + 24)
+            CGPoint(x: visibleFrame.maxX - compactSize.width - 24, y: visibleFrame.minY + 24)
         )
     }
 
@@ -40,5 +41,18 @@ final class OverlayPanelController {
 
     func toggle() {
         panel.isVisible ? panel.orderOut(nil) : show()
+    }
+
+    func setTodoVisible(_ isVisible: Bool) {
+        let size = isVisible ? expandedSize : compactSize
+        guard panel.frame.size != size else { return }
+        let oldFrame = panel.frame
+        let origin = CGPoint(x: oldFrame.maxX - size.width, y: oldFrame.minY)
+        panel.setFrame(CGRect(origin: origin, size: size), display: true, animate: true)
+    }
+
+    func focusChatInput() {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
     }
 }
