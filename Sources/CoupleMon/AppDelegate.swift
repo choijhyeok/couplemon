@@ -11,7 +11,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController!
     private var isCheckingForUpdates = false
     private var chatHotKey: EventHotKeyRef?
-    private var chatHotKeyHandler: EventHandlerRef?
+    private var todoHotKey: EventHotKeyRef?
+    private var hotKeyHandler: EventHandlerRef?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditMenu()
@@ -27,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.onCopyRoomCode = { [weak self] in self?.copyRoomCode() }
         menuBarController.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
         menuBarController.onToggleTodoList = { [weak self] in self?.toggleTodoList() }
+        menuBarController.onToggleTodoVisibility = { [weak self] in self?.toggleTodoVisibility() }
         menuBarController.onFocusChatInput = { [weak self] in self?.focusChatInput() }
         menuBarController.onResetCharacter = { [weak self] in
             do {
@@ -58,13 +60,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBarController.setRoomCodeAvailable(true)
             connectRealtime(using: settings)
         }
-        installChatHotKey()
+        installHotKeys()
         overlayController.show()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let chatHotKey { UnregisterEventHotKey(chatHotKey) }
-        if let chatHotKeyHandler { RemoveEventHandler(chatHotKeyHandler) }
+        if let todoHotKey { UnregisterEventHotKey(todoHotKey) }
+        if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -196,23 +199,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.model.requestChatFocus() }
     }
 
-    private func installChatHotKey() {
+    private func toggleTodoVisibility() {
+        if !model.isTodoEnabled {
+            model.setTodoEnabled(true)
+            menuBarController.setTodoEnabled(true)
+        }
+        overlayController.show()
+        model.toggleTodoVisibility()
+    }
+
+    private func installHotKeys() {
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
         InstallEventHandler(
             GetApplicationEventTarget(),
-            { _, _, userData in
-                guard let userData else { return OSStatus(eventNotHandledErr) }
+            { _, event, userData in
+                guard let event, let userData else { return OSStatus(eventNotHandledErr) }
+                var hotKeyID = EventHotKeyID()
+                guard GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                ) == noErr, hotKeyID.signature == 0x434D4F4E else {
+                    return OSStatus(eventNotHandledErr)
+                }
                 let appDelegate = Unmanaged<AppDelegate>.fromOpaque(userData).takeUnretainedValue()
-                Task { @MainActor in appDelegate.focusChatInput() }
+                Task { @MainActor in
+                    if hotKeyID.id == 1 {
+                        appDelegate.focusChatInput()
+                    } else if hotKeyID.id == 2 {
+                        appDelegate.toggleTodoVisibility()
+                    }
+                }
                 return noErr
             },
             1,
             &eventType,
             Unmanaged.passUnretained(self).toOpaque(),
-            &chatHotKeyHandler
+            &hotKeyHandler
         )
         let hotKeyID = EventHotKeyID(signature: 0x434D4F4E, id: 1)
         RegisterEventHotKey(
@@ -222,6 +252,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             GetApplicationEventTarget(),
             0,
             &chatHotKey
+        )
+        let todoHotKeyID = EventHotKeyID(signature: 0x434D4F4E, id: 2)
+        RegisterEventHotKey(
+            UInt32(kVK_ANSI_T),
+            UInt32(controlKey | optionKey),
+            todoHotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &todoHotKey
         )
     }
 

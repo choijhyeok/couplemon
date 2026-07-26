@@ -70,6 +70,11 @@ final class MessageTextTests: XCTestCase {
         let model = AppModel(defaults: defaults)
 
         model.setTodoEnabled(true)
+        model.toggleTodoVisibility()
+        XCTAssertTrue(model.isTodoVisible)
+        model.setTodoEnabled(false)
+        XCTAssertFalse(model.isTodoVisible)
+        model.setTodoEnabled(true)
         model.addTodo("  장보기  ")
         model.addTodo("삭제할 일")
         model.toggleTodo(id: model.todoItems[0].id)
