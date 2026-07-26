@@ -46,4 +46,27 @@ final class MessageTextTests: XCTestCase {
         XCTAssertEqual(model.characterScale, 1.3)
         XCTAssertEqual(AppModel(defaults: defaults).characterScale, 1.3)
     }
+
+    @MainActor
+    func testBundledPetIsFallbackAndReturnsAfterReset() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let model = AppModel(
+            characterURL: temporaryDirectory.appendingPathComponent("character.png"),
+            petDirectory: temporaryDirectory.appendingPathComponent("pet", isDirectory: true),
+            bundledPetDirectory: Self.defaultPetDirectory
+        )
+
+        XCTAssertEqual(model.hatchPet?.manifest.id, "kt-ribbon-pet")
+        try model.resetCharacter()
+        XCTAssertEqual(model.hatchPet?.manifest.id, "kt-ribbon-pet")
+    }
+
+    private static var defaultPetDirectory: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources/DefaultPet", isDirectory: true)
+    }
 }

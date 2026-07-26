@@ -29,6 +29,7 @@ final class AppModel: ObservableObject {
 
     private let characterURL: URL
     private let petDirectory: URL
+    private let bundledPetDirectory: URL?
     private let defaults: UserDefaults
     private var bubbleDismissTask: Task<Void, Never>?
     private var isEditingMessage = false
@@ -36,17 +37,24 @@ final class AppModel: ObservableObject {
     init(
         characterURL: URL? = nil,
         petDirectory: URL? = nil,
+        bundledPetDirectory: URL? = Bundle.main.resourceURL?
+            .appendingPathComponent("DefaultPet", isDirectory: true),
         defaults: UserDefaults = .standard
     ) {
         let resolvedCharacterURL = characterURL ?? Self.defaultCharacterURL
         let resolvedPetDirectory = petDirectory ?? Self.defaultPetDirectory
         self.characterURL = resolvedCharacterURL
         self.petDirectory = resolvedPetDirectory
+        self.bundledPetDirectory = bundledPetDirectory
         self.defaults = defaults
         displayedMessage = "오늘도 같이 있자 💛"
         let loadedPet = try? HatchPetPackage.load(from: resolvedPetDirectory)
-        hatchPet = loadedPet
-        characterImage = loadedPet == nil ? NSImage(contentsOf: resolvedCharacterURL) : nil
+        let loadedImage = loadedPet == nil ? NSImage(contentsOf: resolvedCharacterURL) : nil
+        let defaultPet = loadedPet == nil && loadedImage == nil
+            ? bundledPetDirectory.flatMap { try? HatchPetPackage.load(from: $0) }
+            : nil
+        hatchPet = loadedPet ?? defaultPet
+        characterImage = loadedImage
         let savedScale = defaults.object(forKey: Self.characterScaleKey) == nil
             ? 1
             : defaults.double(forKey: Self.characterScaleKey)
@@ -190,7 +198,7 @@ final class AppModel: ObservableObject {
             try fileManager.removeItem(at: petDirectory)
         }
         characterImage = nil
-        hatchPet = nil
+        hatchPet = bundledPetDirectory.flatMap { try? HatchPetPackage.load(from: $0) }
     }
 
     private static var defaultCharacterURL: URL {

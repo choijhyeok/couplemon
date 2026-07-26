@@ -26,6 +26,7 @@ jobs:
           test "$(plutil -extract CFBundleShortVersionString raw dist/CoupleMon.app/Contents/Info.plist)" = "$version"
           codesign --verify --deep --strict --verbose=2 dist/CoupleMon.app
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/MacOS/CoupleMon$'
+          pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/DefaultPet/pet.json$'
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
