@@ -63,20 +63,26 @@ final class MessageTextTests: XCTestCase {
         XCTAssertEqual(CoupleMonEmoticon(messageValue: "😀"), nil)
     }
 
-    func testEmoticonLoadsFromPackagedResourceLayout() throws {
+    func testAllEmoticonsLoadFromPackagedResourceLayout() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         let bundle = root.appendingPathComponent("CoupleMon_CoupleMon.bundle", isDirectory: true)
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let source = URL(fileURLWithPath: #filePath)
+        let sourceDirectory = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
-            .appendingPathComponent("Sources/CoupleMon/Resources/Emoticons/quokka.png")
-        try FileManager.default.copyItem(at: source, to: bundle.appendingPathComponent("quokka.png"))
+            .appendingPathComponent("Sources/CoupleMon/Resources/Emoticons")
 
-        XCTAssertNotNil(CoupleMonEmoticon.quokka.image(resourceRootURL: root))
+        for emoticon in CoupleMonEmoticon.allCases {
+            let filename = "\(emoticon.rawValue).png"
+            try FileManager.default.copyItem(
+                at: sourceDirectory.appendingPathComponent(filename),
+                to: bundle.appendingPathComponent(filename)
+            )
+            XCTAssertNotNil(emoticon.image(resourceRootURL: root))
+        }
     }
 
     func testMissingEmoticonBundleFallsBackWithoutCrashing() {

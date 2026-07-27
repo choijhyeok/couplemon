@@ -5,10 +5,14 @@ enum CoupleMonEmoticon: String, CaseIterable, Identifiable {
     case quokkaCheer = "quokka_cheer"
     case quokkaAngry = "quokka_angry"
     case quokkaSorry = "quokka_sorry"
+    case quokkaDeveloper = "quokka_developer"
+    case quokkaTeaseClaude = "quokka_tease_claude"
     case otter
     case otterLaugh = "otter_laugh"
     case otterSleepy = "otter_sleepy"
     case otterEat = "otter_eat"
+    case otterDeveloper = "otter_developer"
+    case otterTeaseCodex = "otter_tease_codex"
     case couple
     case coupleKiss = "couple_kiss"
     case coupleCheer = "couple_cheer"
@@ -23,10 +27,14 @@ enum CoupleMonEmoticon: String, CaseIterable, Identifiable {
         case .quokkaCheer: ("신나", "신나게 뛰는 쿼카")
         case .quokkaAngry: ("삐짐", "팔짱 끼고 삐진 쿼카")
         case .quokkaSorry: ("미안", "눈물을 흘리며 미안해하는 쿼카")
+        case .quokkaDeveloper: ("개발 쿼카", "노트북으로 개발하는 쿼카")
+        case .quokkaTeaseClaude: ("Claude 괴롭힘", "Claude에게 장난치는 쿼카")
         case .otter: ("사랑", "하트를 안은 수달")
         case .otterLaugh: ("빵터짐", "배를 잡고 웃는 수달")
         case .otterSleepy: ("잘자", "베개를 안고 자는 수달")
         case .otterEat: ("밥먹자", "밥그릇을 든 수달")
+        case .otterDeveloper: ("개발 수달", "노트북으로 개발하는 수달")
+        case .otterTeaseCodex: ("Codex 괴롭힘", "Codex에게 장난치는 수달")
         case .couple: ("꼬옥", "서로 꼭 안은 쿼카와 수달")
         case .coupleKiss: ("뽀뽀", "수달에게 뽀뽀하는 쿼카")
         case .coupleCheer: ("힘내", "하이파이브하는 쿼카와 수달")

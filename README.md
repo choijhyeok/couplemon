@@ -9,7 +9,7 @@
 - Codex pet v1/v2 `pet.json` + `spritesheet.webp` 선택, 검증, idle 애니메이션 재생
 - Supabase Realtime Broadcast를 통한 두 Mac 말풍선·이모지 동기화
 - macOS 이모지 선택기와 120자 말풍선 입력
-- 쿼카·수달·커플 반응 CoupleMon 전용 이모티콘 12종
+- 쿼카·수달·커플 반응 CoupleMon 전용 이모티콘 16종
 - `나`/`상대`를 구분한 최근 대화 5개 표시
 - 내 것·상대 것·커플 공용으로 나뉘며 DB에 보존되는 실시간 Todo List
 - 말풍선은 전송·수신 후 5초 뒤 자동으로 숨김
