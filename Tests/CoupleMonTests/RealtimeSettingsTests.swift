@@ -46,4 +46,28 @@ final class RealtimeSettingsTests: XCTestCase {
             ).validated()
         )
     }
+
+    func testSettingsMigrateFromLegacyDefaults() throws {
+        let currentName = "RealtimeSettingsTests.current.\(UUID().uuidString)"
+        let legacyName = "RealtimeSettingsTests.legacy.\(UUID().uuidString)"
+        let current = UserDefaults(suiteName: currentName)!
+        let legacy = UserDefaults(suiteName: legacyName)!
+        defer {
+            current.removePersistentDomain(forName: currentName)
+            legacy.removePersistentDomain(forName: legacyName)
+        }
+        let settings = RealtimeSettings(
+            projectURL: "https://example.supabase.co",
+            publishableKey: "sb_publishable_example",
+            roomCode: "ABCDEFGHJKLMNPQR"
+        )
+        try settings.save(to: legacy)
+
+        XCTAssertEqual(
+            RealtimeSettings.load(from: current, legacyDefaults: legacy),
+            settings
+        )
+        legacy.removePersistentDomain(forName: legacyName)
+        XCTAssertEqual(RealtimeSettings.load(from: current), settings)
+    }
 }

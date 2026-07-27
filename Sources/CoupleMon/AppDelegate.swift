@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let model = AppModel()
     private let realtime = CoupleRealtimeService()
+    private let todoService = CoupleTodoService()
     private let updateService = UpdateService()
     private var overlayController: OverlayPanelController!
     private var menuBarController: MenuBarController!
@@ -13,6 +14,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chatHotKey: EventHotKeyRef?
     private var todoHotKey: EventHotKeyRef?
     private var hotKeyHandler: EventHandlerRef?
+    private var todoRoomCode: String?
+    private var todoSyncTask: Task<Void, Never>?
+    private var todoSyncRequested = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditMenu()
@@ -48,9 +52,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.onTodoVisibilityChange = { [weak self] isVisible in
             self?.overlayController.setTodoVisible(isVisible)
         }
+        model.onTodoMutation = { [weak self] in
+            self?.requestTodoSync()
+        }
         realtime.onMessage = { [weak self] message in self?.model.receive(message) }
+        realtime.onTodoChanged = { [weak self] in
+            self?.requestTodoSync()
+        }
         realtime.onStateChange = { [weak self] state in
             self?.menuBarController.setRealtimeState(state)
+            if state == .connected { self?.requestTodoSync() }
         }
 
         if
@@ -178,8 +189,71 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func connectRealtime(using settings: RealtimeSettings) {
+        todoRoomCode = settings.normalizedRoomCode
+        todoService.configure(settings: settings, ownerID: model.todoOwnerID)
         Task { [weak self] in
-            await self?.realtime.connect(to: settings)
+            guard let self else { return }
+            await realtime.connect(to: settings)
+            requestTodoSync()
+        }
+    }
+
+    private func requestTodoSync() {
+        todoSyncRequested = true
+        guard todoSyncTask == nil else { return }
+        todoSyncTask = Task { [weak self] in
+            guard let self else { return }
+            while todoSyncRequested {
+                todoSyncRequested = false
+                await synchronizeTodos()
+            }
+            todoSyncTask = nil
+        }
+    }
+
+    private func synchronizeTodos() async {
+        guard let todoRoomCode else { return }
+        do {
+            let legacyTodos = model.prepareTodoRoom(todoRoomCode)
+            if !legacyTodos.isEmpty {
+                try await todoService.upsert(legacyTodos)
+                guard self.todoRoomCode == todoRoomCode else { return }
+                realtime.sendTodoChanged()
+            }
+            model.markTodoRoomPrepared(todoRoomCode)
+            guard await flushTodoMutations(roomCode: todoRoomCode) else { return }
+            guard self.todoRoomCode == todoRoomCode else { return }
+            let revision = model.todoMutationRevision
+            let todos = try await todoService.fetchTodos()
+            guard self.todoRoomCode == todoRoomCode, revision == model.todoMutationRevision else { return }
+            model.replaceTodos(todos, roomCode: todoRoomCode)
+            model.setTodoSyncError(nil)
+        } catch {
+            model.setTodoSyncError(error.localizedDescription)
+        }
+    }
+
+    @discardableResult
+    private func flushTodoMutations(roomCode: String) async -> Bool {
+        do {
+            var changed = false
+            while todoRoomCode == roomCode,
+                  let mutation = model.nextTodoMutation(roomCode: roomCode) {
+                switch mutation.action {
+                case .upsert:
+                    if let item = mutation.item { try await todoService.upsert([item]) }
+                case .delete:
+                    try await todoService.delete(id: mutation.id)
+                }
+                model.completeTodoMutation(mutation)
+                changed = true
+            }
+            model.setTodoSyncError(nil)
+            if changed { realtime.sendTodoChanged() }
+            return true
+        } catch {
+            model.setTodoSyncError(error.localizedDescription)
+            return false
         }
     }
 

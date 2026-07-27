@@ -1,5 +1,11 @@
 import Foundation
 
+extension UserDefaults {
+    static var coupleMon: UserDefaults {
+        UserDefaults(suiteName: "com.couplemon.app") ?? .standard
+    }
+}
+
 struct RealtimeSettings: Codable, Equatable {
     enum SettingsError: LocalizedError {
         case invalidProjectURL
@@ -56,13 +62,54 @@ struct RealtimeSettings: Codable, Equatable {
         )
     }
 
-    func save(to defaults: UserDefaults = .standard) throws {
+    func save() throws {
+        let data = try JSONEncoder().encode(self)
+        try FileManager.default.createDirectory(
+            at: Self.settingsURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: Self.settingsURL.deletingLastPathComponent().path
+        )
+        try data.write(to: Self.settingsURL, options: .atomic)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: Self.settingsURL.path
+        )
+        UserDefaults.coupleMon.set(data, forKey: Self.defaultsKey)
+    }
+
+    func save(to defaults: UserDefaults) throws {
         defaults.set(try JSONEncoder().encode(self), forKey: Self.defaultsKey)
     }
 
-    static func load(from defaults: UserDefaults = .standard) -> RealtimeSettings? {
+    static func load() -> RealtimeSettings? {
+        if
+            let data = try? Data(contentsOf: settingsURL),
+            let settings = try? JSONDecoder().decode(RealtimeSettings.self, from: data)
+        {
+            try? settings.save()
+            return settings
+        }
+        guard let settings = load(from: .coupleMon, legacyDefaults: .standard) else { return nil }
+        try? settings.save()
+        return settings
+    }
+
+    static func load(from defaults: UserDefaults) -> RealtimeSettings? {
         guard let data = defaults.data(forKey: defaultsKey) else { return nil }
         return try? JSONDecoder().decode(RealtimeSettings.self, from: data)
+    }
+
+    static func load(
+        from defaults: UserDefaults,
+        legacyDefaults: UserDefaults?
+    ) -> RealtimeSettings? {
+        if let settings = load(from: defaults) { return settings }
+        guard let legacyDefaults, let settings = load(from: legacyDefaults) else { return nil }
+        try? settings.save(to: defaults)
+        return settings
     }
 
     static func makeRoomCode() -> String {
@@ -84,6 +131,12 @@ struct RealtimeSettings: Codable, Equatable {
             let claims = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return false }
         return claims["role"] as? String == "anon"
+    }
+
+    private static var settingsURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("CoupleMon", isDirectory: true)
+            .appendingPathComponent("realtime-settings.json")
     }
 }
 

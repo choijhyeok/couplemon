@@ -8,11 +8,13 @@ final class CoupleRealtimeService {
     }
 
     var onMessage: ((String) -> Void)?
+    var onTodoChanged: (() -> Void)?
     var onStateChange: ((CoupleRealtimeState) -> Void)?
 
     private var client: RealtimeClientV2?
     private var channel: RealtimeChannelV2?
     private var receiveTask: Task<Void, Never>?
+    private var todoReceiveTask: Task<Void, Never>?
     private var statusTask: Task<Void, Never>?
     private var connectionID: UUID?
     private(set) var state: CoupleRealtimeState = .notConfigured {
@@ -36,6 +38,7 @@ final class CoupleRealtimeService {
                 $0.broadcast.acknowledgeBroadcasts = true
             }
             let stream = channel.broadcastStream(event: "message")
+            let todoStream = channel.broadcastStream(event: "todo_changed")
 
             self.client = client
             self.channel = channel
@@ -46,6 +49,12 @@ final class CoupleRealtimeService {
                         let text = envelope["payload"]?.objectValue?["text"]?.stringValue
                     else { continue }
                     self?.onMessage?(text)
+                }
+            }
+            todoReceiveTask = Task { [weak self] in
+                for await _ in todoStream {
+                    guard !Task.isCancelled else { return }
+                    self?.onTodoChanged?()
                 }
             }
 
@@ -87,10 +96,17 @@ final class CoupleRealtimeService {
         }
     }
 
+    func sendTodoChanged() {
+        guard state == .connected, let channel else { return }
+        Task { try? await channel.broadcast(event: "todo_changed", message: ["changed": true]) }
+    }
+
     private func stop() async {
         connectionID = nil
         receiveTask?.cancel()
         receiveTask = nil
+        todoReceiveTask?.cancel()
+        todoReceiveTask = nil
         statusTask?.cancel()
         statusTask = nil
         if let client, let channel {

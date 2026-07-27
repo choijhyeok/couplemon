@@ -38,12 +38,18 @@ enum CoupleMonEmoticon: String, CaseIterable, Identifiable {
     var accessibilityLabel: String { metadata.accessibilityLabel }
 
     var image: NSImage? {
-        let url = Bundle.module.url(
-            forResource: rawValue,
-            withExtension: "png",
-            subdirectory: "Emoticons"
-        ) ?? Bundle.module.url(forResource: rawValue, withExtension: "png")
-        return url.flatMap(NSImage.init(contentsOf:))
+        image(resourceRootURL: Bundle.main.resourceURL)
+    }
+
+    func image(resourceRootURL: URL?) -> NSImage? {
+        guard let resourceRootURL else { return nil }
+        let bundleURL = resourceRootURL.appendingPathComponent("CoupleMon_CoupleMon.bundle")
+        let candidates = [
+            bundleURL.appendingPathComponent("\(rawValue).png"),
+            bundleURL.appendingPathComponent("Emoticons/\(rawValue).png"),
+        ]
+        return candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+            .flatMap(NSImage.init(contentsOf:))
     }
 
     init?(messageValue: String) {

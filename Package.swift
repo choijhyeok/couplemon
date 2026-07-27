@@ -18,6 +18,7 @@ let package = Package(
         .executableTarget(
             name: "CoupleMon",
             dependencies: [
+                .product(name: "PostgREST", package: "supabase-swift"),
                 .product(name: "Realtime", package: "supabase-swift"),
             ],
             resources: [.process("Resources")]

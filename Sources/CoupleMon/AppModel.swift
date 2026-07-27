@@ -9,10 +9,79 @@ final class AppModel: ObservableObject {
         let isLocal: Bool
     }
 
+    enum TodoListKind: String, CaseIterable, Identifiable {
+        case mine
+        case partner
+        case couple
+
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .mine: "내 할 일"
+            case .partner: "상대"
+            case .couple: "커플"
+            }
+        }
+    }
+
+    enum TodoScope: String, Codable {
+        case personal
+        case couple
+    }
+
     struct TodoItem: Codable, Identifiable, Equatable {
         let id: UUID
         let text: String
         var isCompleted: Bool
+        var scope: TodoScope
+        var ownerID: UUID?
+
+        init(
+            id: UUID,
+            text: String,
+            isCompleted: Bool,
+            scope: TodoScope = .personal,
+            ownerID: UUID? = nil
+        ) {
+            self.id = id
+            self.text = text
+            self.isCompleted = isCompleted
+            self.scope = scope
+            self.ownerID = ownerID
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case id, text, isCompleted, scope, ownerID
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(UUID.self, forKey: .id)
+            text = try values.decode(String.self, forKey: .text)
+            isCompleted = try values.decode(Bool.self, forKey: .isCompleted)
+            scope = try values.decodeIfPresent(TodoScope.self, forKey: .scope) ?? .personal
+            ownerID = try values.decodeIfPresent(UUID.self, forKey: .ownerID)
+        }
+    }
+
+    struct TodoMutation: Codable, Equatable {
+        enum Action: String, Codable {
+            case upsert
+            case delete
+        }
+
+        let action: Action
+        let item: TodoItem?
+        let id: UUID
+        let roomCode: String?
+
+        static func upsert(_ item: TodoItem, roomCode: String?) -> Self {
+            Self(action: .upsert, item: item, id: item.id, roomCode: roomCode)
+        }
+
+        static func delete(_ id: UUID, roomCode: String?) -> Self {
+            Self(action: .delete, item: nil, id: id, roomCode: roomCode)
+        }
     }
 
     enum CharacterError: LocalizedError {
@@ -30,6 +99,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var characterScale: CGFloat
     @Published private(set) var isBubbleVisible = true
     @Published private(set) var todoItems: [TodoItem]
+    @Published private(set) var todoSyncError: String?
     @Published private(set) var isTodoEnabled: Bool
     @Published private(set) var isTodoVisible = false
     @Published private(set) var chatFocusRequest = 0
@@ -37,11 +107,15 @@ final class AppModel: ObservableObject {
     var onSend: ((String) -> Void)?
     var onCharacterScaleChange: ((CGFloat) -> Void)?
     var onTodoVisibilityChange: ((Bool) -> Void)?
+    var onTodoMutation: (() -> Void)?
 
     private let characterURL: URL
     private let petDirectory: URL
     private let bundledPetDirectory: URL?
     private let defaults: UserDefaults
+    private(set) var todoOwnerID: UUID
+    private(set) var pendingTodoMutations: [TodoMutation]
+    private(set) var todoMutationRevision = 0
     private var bubbleDismissTask: Task<Void, Never>?
     private(set) var isEditingMessage = false
 
@@ -58,6 +132,17 @@ final class AppModel: ObservableObject {
         self.petDirectory = resolvedPetDirectory
         self.bundledPetDirectory = bundledPetDirectory
         self.defaults = defaults
+        let resolvedTodoOwnerID: UUID
+        if
+            let value = defaults.string(forKey: Self.todoOwnerIDKey),
+            let savedID = UUID(uuidString: value)
+        {
+            resolvedTodoOwnerID = savedID
+        } else {
+            resolvedTodoOwnerID = UUID()
+            defaults.set(resolvedTodoOwnerID.uuidString, forKey: Self.todoOwnerIDKey)
+        }
+        todoOwnerID = resolvedTodoOwnerID
         displayedMessage = "오늘도 같이 있자 💛"
         let loadedPet = try? HatchPetPackage.load(from: resolvedPetDirectory)
         let loadedImage = loadedPet == nil ? NSImage(contentsOf: resolvedCharacterURL) : nil
@@ -66,8 +151,16 @@ final class AppModel: ObservableObject {
             : nil
         hatchPet = loadedPet ?? defaultPet
         characterImage = loadedImage
-        todoItems = defaults.data(forKey: Self.todoItemsKey)
+        let loadedTodos = defaults.data(forKey: Self.todoItemsKey)
             .flatMap { try? JSONDecoder().decode([TodoItem].self, from: $0) } ?? []
+        todoItems = loadedTodos.map { item in
+            var item = item
+            if item.scope == .personal, item.ownerID == nil { item.ownerID = resolvedTodoOwnerID }
+            return item
+        }
+        pendingTodoMutations = defaults.data(forKey: Self.pendingTodoMutationsKey)
+            .flatMap { try? JSONDecoder().decode([TodoMutation].self, from: $0) } ?? []
+        todoSyncError = nil
         isTodoEnabled = defaults.bool(forKey: Self.todoEnabledKey)
         let savedScale = defaults.object(forKey: Self.characterScaleKey) == nil
             ? 1
@@ -95,22 +188,94 @@ final class AppModel: ObservableObject {
         bubbleDismissTask?.cancel()
     }
 
-    func addTodo(_ rawValue: String) {
+    func addTodo(_ rawValue: String, to list: TodoListKind = .mine) {
         let text = MessageText.normalize(rawValue)
-        guard !text.isEmpty else { return }
-        todoItems.append(TodoItem(id: UUID(), text: text, isCompleted: false))
+        guard !text.isEmpty, list != .partner else { return }
+        let item = TodoItem(
+            id: UUID(),
+            text: text,
+            isCompleted: false,
+            scope: list == .couple ? .couple : .personal,
+            ownerID: list == .couple ? nil : todoOwnerID
+        )
+        todoItems.append(item)
         saveTodos()
+        enqueueTodoMutation(.upsert(item, roomCode: currentTodoRoomCode))
     }
 
     func toggleTodo(id: UUID) {
-        guard let index = todoItems.firstIndex(where: { $0.id == id }) else { return }
+        guard
+            let index = todoItems.firstIndex(where: { $0.id == id }),
+            canEdit(todoItems[index])
+        else { return }
         todoItems[index].isCompleted.toggle()
         saveTodos()
+        enqueueTodoMutation(.upsert(todoItems[index], roomCode: currentTodoRoomCode))
     }
 
     func deleteTodo(id: UUID) {
+        guard let item = todoItems.first(where: { $0.id == id }), canEdit(item) else { return }
         todoItems.removeAll { $0.id == id }
         saveTodos()
+        enqueueTodoMutation(.delete(id, roomCode: currentTodoRoomCode))
+    }
+
+    func todoItems(for list: TodoListKind) -> [TodoItem] {
+        todoItems.filter { item in
+            switch list {
+            case .mine: item.scope == .personal && item.ownerID == todoOwnerID
+            case .partner: item.scope == .personal && item.ownerID != todoOwnerID
+            case .couple: item.scope == .couple
+            }
+        }
+    }
+
+    func canEdit(_ item: TodoItem) -> Bool {
+        item.scope == .couple || item.ownerID == todoOwnerID
+    }
+
+    func replaceTodos(_ items: [TodoItem], roomCode: String? = nil) {
+        todoItems = items
+        saveTodos()
+        if let roomCode { defaults.set(roomCode, forKey: Self.todoRoomCodeKey) }
+    }
+
+    func setTodoSyncError(_ message: String?) {
+        todoSyncError = message
+    }
+
+    func prepareTodoRoom(_ roomCode: String) -> [TodoItem] {
+        guard let previousRoom = defaults.string(forKey: Self.todoRoomCodeKey) else {
+            pendingTodoMutations = pendingTodoMutations.map { mutation in
+                TodoMutation(
+                    action: mutation.action,
+                    item: mutation.item,
+                    id: mutation.id,
+                    roomCode: mutation.roomCode ?? roomCode
+                )
+            }
+            saveTodoMutations()
+            return todoItems
+        }
+        guard previousRoom != roomCode else { return [] }
+        todoItems = []
+        saveTodos()
+        defaults.set(roomCode, forKey: Self.todoRoomCodeKey)
+        return []
+    }
+
+    func markTodoRoomPrepared(_ roomCode: String) {
+        defaults.set(roomCode, forKey: Self.todoRoomCodeKey)
+    }
+
+    func nextTodoMutation(roomCode: String) -> TodoMutation? {
+        pendingTodoMutations.first { $0.roomCode == roomCode }
+    }
+
+    func completeTodoMutation(_ mutation: TodoMutation) {
+        guard let index = pendingTodoMutations.firstIndex(of: mutation) else { return }
+        pendingTodoMutations.remove(at: index)
+        saveTodoMutations()
     }
 
     func setTodoEnabled(_ isEnabled: Bool) {
@@ -191,6 +356,23 @@ final class AppModel: ObservableObject {
     private func saveTodos() {
         if let data = try? JSONEncoder().encode(todoItems) {
             defaults.set(data, forKey: Self.todoItemsKey)
+        }
+    }
+
+    private func enqueueTodoMutation(_ mutation: TodoMutation) {
+        pendingTodoMutations.append(mutation)
+        todoMutationRevision += 1
+        saveTodoMutations()
+        onTodoMutation?()
+    }
+
+    private var currentTodoRoomCode: String? {
+        defaults.string(forKey: Self.todoRoomCodeKey)
+    }
+
+    private func saveTodoMutations() {
+        if let data = try? JSONEncoder().encode(pendingTodoMutations) {
+            defaults.set(data, forKey: Self.pendingTodoMutationsKey)
         }
     }
 
@@ -280,5 +462,8 @@ final class AppModel: ObservableObject {
 
     private static let characterScaleKey = "characterScale"
     private static let todoItemsKey = "todoItems"
+    private static let pendingTodoMutationsKey = "pendingTodoMutations"
     private static let todoEnabledKey = "todoEnabled"
+    private static let todoOwnerIDKey = "todoOwnerID"
+    private static let todoRoomCodeKey = "todoRoomCode"
 }

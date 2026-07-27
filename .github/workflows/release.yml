@@ -27,6 +27,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 dist/CoupleMon.app
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/MacOS/CoupleMon$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/DefaultPet/pet.json$'
+          pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/quokka.png$'
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
