@@ -223,7 +223,11 @@ struct CompanionView: View {
     @ViewBuilder
     private var character: some View {
         if let pet = model.hatchPet {
-            AnimatedHatchPetView(pet: pet, size: 150 * model.characterScale)
+            AnimatedHatchPetView(
+                pet: pet,
+                size: 150 * model.characterScale,
+                messageID: model.messageHistory.last?.id
+            )
                 .id(pet.manifest.id)
         } else if let image = model.characterImage {
             Image(nsImage: image)
@@ -416,20 +420,49 @@ struct CompanionView: View {
 private struct AnimatedHatchPetView: View {
     let pet: HatchPet
     let size: CGFloat
+    let messageID: UUID?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var startedAt = Date()
+    @State private var activeAnimation: HatchPetContract.Animation?
+    @State private var lastAnimation: HatchPetContract.Animation?
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+        TimelineView(
+            .animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || activeAnimation == nil)
+        ) { timeline in
             let elapsed = timeline.date.timeIntervalSince(startedAt)
-            let frameIndex = reduceMotion ? 0 : HatchPetContract.idleFrameIndex(elapsed: elapsed)
+            let animation = activeAnimation ?? .idle
+            let frameIndex = activeAnimation == nil || reduceMotion
+                ? 0
+                : HatchPetContract.frameIndex(elapsed: elapsed, animation: animation)
+            let frames = pet.animations[animation] ?? pet.animations[.idle]!
 
-            Image(nsImage: pet.idleFrames[frameIndex])
+            Image(nsImage: frames[frameIndex])
                 .resizable()
                 .interpolation(.none)
                 .scaledToFit()
                 .frame(width: size, height: size)
+        }
+        .task(id: messageID) {
+            guard messageID != nil, !reduceMotion else { return }
+            let animations = HatchPetContract.chatAnimationChoices(
+                available: Set(pet.animations.keys),
+                excluding: lastAnimation
+            )
+            guard let animation = animations.randomElement() else { return }
+
+            lastAnimation = animation
+            activeAnimation = animation
+            startedAt = Date()
+            do {
+                try await Task.sleep(
+                    nanoseconds: UInt64(animation.duration * 1_000_000_000)
+                )
+            } catch {
+                return
+            }
+            activeAnimation = nil
         }
         .accessibilityLabel(pet.manifest.displayName)
     }

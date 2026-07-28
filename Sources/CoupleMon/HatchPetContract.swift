@@ -34,6 +34,45 @@ enum HatchPetError: LocalizedError {
 }
 
 enum HatchPetContract {
+    enum Animation: Int, CaseIterable {
+        case idle
+        case runningRight
+        case runningLeft
+        case waving
+        case jumping
+        case failed
+        case waiting
+        case running
+        case review
+        case lookAround
+
+        var frameCount: Int {
+            switch self {
+            case .idle, .waiting, .running, .review: 6
+            case .runningRight, .runningLeft, .failed: 8
+            case .waving: 4
+            case .jumping: 5
+            case .lookAround: 16
+            }
+        }
+
+        var durations: [TimeInterval] {
+            switch self {
+            case .idle: idleDurations
+            case .runningRight, .runningLeft: Array(repeating: 0.120, count: 7) + [0.220]
+            case .waving: Array(repeating: 0.140, count: 3) + [0.280]
+            case .jumping: Array(repeating: 0.140, count: 4) + [0.280]
+            case .failed: Array(repeating: 0.140, count: 7) + [0.240]
+            case .waiting: Array(repeating: 0.150, count: 5) + [0.260]
+            case .running: Array(repeating: 0.120, count: 5) + [0.220]
+            case .review: Array(repeating: 0.150, count: 5) + [0.280]
+            case .lookAround: Array(repeating: 0.120, count: 16)
+            }
+        }
+
+        var duration: TimeInterval { durations.reduce(0, +) }
+    }
+
     static let spriteVersion = 2
     static let columns = 8
     static let standardRows = 9
@@ -42,6 +81,7 @@ enum HatchPetContract {
     static let cellHeight = 208
     static let atlasWidth = columns * cellWidth
     static let idleDurations: [TimeInterval] = [0.280, 0.110, 0.110, 0.140, 0.140, 0.320]
+    static let chatAnimations = Animation.allCases.filter { $0 != .idle }
 
     static func validateManifest(_ manifest: HatchPetManifest) throws {
         guard !manifest.id.isEmpty, !manifest.displayName.isEmpty else {
@@ -72,11 +112,26 @@ enum HatchPetContract {
     }
 
     static func idleFrameIndex(elapsed: TimeInterval) -> Int {
-        let totalDuration = idleDurations.reduce(0, +)
+        frameIndex(elapsed: elapsed, durations: idleDurations)
+    }
+
+    static func frameIndex(elapsed: TimeInterval, animation: Animation) -> Int {
+        frameIndex(elapsed: elapsed, durations: animation.durations)
+    }
+
+    static func chatAnimationChoices(
+        available: Set<Animation>,
+        excluding previous: Animation?
+    ) -> [Animation] {
+        chatAnimations.filter { available.contains($0) && $0 != previous }
+    }
+
+    private static func frameIndex(elapsed: TimeInterval, durations: [TimeInterval]) -> Int {
+        let totalDuration = durations.reduce(0, +)
         let position = max(0, elapsed).truncatingRemainder(dividingBy: totalDuration)
         var boundary: TimeInterval = 0
 
-        for (index, duration) in idleDurations.enumerated() {
+        for (index, duration) in durations.enumerated() {
             boundary += duration
             if position < boundary { return index }
         }

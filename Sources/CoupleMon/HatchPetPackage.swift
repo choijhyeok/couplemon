@@ -4,7 +4,7 @@ import UniformTypeIdentifiers
 
 struct HatchPet {
     let manifest: HatchPetManifest
-    let idleFrames: [NSImage]
+    let animations: [HatchPetContract.Animation: [NSImage]]
 }
 
 enum HatchPetPackage {
@@ -50,22 +50,32 @@ enum HatchPetPackage {
             throw HatchPetError.unreadableAtlas
         }
 
-        let idleFrames = try (0..<HatchPetContract.idleDurations.count).map { column in
-            let rect = CGRect(
-                x: column * HatchPetContract.cellWidth,
-                y: 0,
-                width: HatchPetContract.cellWidth,
-                height: HatchPetContract.cellHeight
-            )
-            guard let frame = atlas.cropping(to: rect) else {
-                throw HatchPetError.unreadableAtlas
-            }
-            return NSImage(
-                cgImage: frame,
-                size: NSSize(width: HatchPetContract.cellWidth, height: HatchPetContract.cellHeight)
-            )
+        let availableAnimations = HatchPetContract.Animation.allCases.filter {
+            $0 != .lookAround || manifest.spriteVersion == HatchPetContract.spriteVersion
         }
+        let animations = try Dictionary(uniqueKeysWithValues: availableAnimations.map { animation in
+            let frames = try (0..<animation.frameCount).map { index in
+                let row = animation == .lookAround
+                    ? HatchPetContract.standardRows + (index / HatchPetContract.columns)
+                    : animation.rawValue
+                let column = index % HatchPetContract.columns
+                let rect = CGRect(
+                    x: column * HatchPetContract.cellWidth,
+                    y: row * HatchPetContract.cellHeight,
+                    width: HatchPetContract.cellWidth,
+                    height: HatchPetContract.cellHeight
+                )
+                guard let frame = atlas.cropping(to: rect) else {
+                    throw HatchPetError.unreadableAtlas
+                }
+                return NSImage(
+                    cgImage: frame,
+                    size: NSSize(width: HatchPetContract.cellWidth, height: HatchPetContract.cellHeight)
+                )
+            }
+            return (animation, frames)
+        })
 
-        return HatchPet(manifest: manifest, idleFrames: idleFrames)
+        return HatchPet(manifest: manifest, animations: animations)
     }
 }

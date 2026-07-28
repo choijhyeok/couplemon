@@ -53,4 +53,19 @@ final class HatchPetContractTests: XCTestCase {
         XCTAssertEqual(HatchPetContract.idleFrameIndex(elapsed: 0.391), 2)
         XCTAssertEqual(HatchPetContract.idleFrameIndex(elapsed: 1.100), 0)
     }
+
+    func testChatAnimationPoolUsesEveryNonIdleRow() {
+        XCTAssertEqual(
+            HatchPetContract.chatAnimations,
+            HatchPetContract.Animation.allCases.filter { $0 != .idle }
+        )
+        XCTAssertFalse(HatchPetContract.chatAnimations.contains(.idle))
+
+        let choices = HatchPetContract.chatAnimationChoices(
+            available: Set(HatchPetContract.Animation.allCases),
+            excluding: .waving
+        )
+        XCTAssertFalse(choices.contains(.waving))
+        XCTAssertEqual(choices.count, HatchPetContract.chatAnimations.count - 1)
+    }
 }
