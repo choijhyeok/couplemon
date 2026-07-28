@@ -429,11 +429,11 @@ private struct AnimatedHatchPetView: View {
 
     var body: some View {
         TimelineView(
-            .animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || activeAnimation == nil)
+            .animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)
         ) { timeline in
             let elapsed = timeline.date.timeIntervalSince(startedAt)
             let animation = activeAnimation ?? .idle
-            let frameIndex = activeAnimation == nil || reduceMotion
+            let frameIndex = reduceMotion
                 ? 0
                 : HatchPetContract.frameIndex(elapsed: elapsed, animation: animation)
             let frames = pet.animations[animation] ?? pet.animations[.idle]!
@@ -462,6 +462,7 @@ private struct AnimatedHatchPetView: View {
             } catch {
                 return
             }
+            startedAt = Date()
             activeAnimation = nil
         }
         .accessibilityLabel(pet.manifest.displayName)
