@@ -146,25 +146,32 @@ struct CompanionView: View {
                 messageContent(model.displayedMessage, emoticonSize: 84)
                     .frame(maxWidth: .infinity)
             } else {
-                ScrollView(.vertical) {
-                    VStack(spacing: 4) {
-                        ForEach(model.messageHistory) { message in
-                            HStack(alignment: .top, spacing: 6) {
-                                if message.isLocal { Spacer(minLength: 18) }
-                                Text(message.isLocal ? "나" : "상대")
-                                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                                    .foregroundStyle(message.isLocal ? Color.accentColor : Color.secondary)
-                                messageContent(message.text, emoticonSize: 54)
-                                if !message.isLocal { Spacer(minLength: 18) }
+                ScrollViewReader { proxy in
+                    ScrollView(.vertical) {
+                        VStack(spacing: 4) {
+                            ForEach(model.messageHistory) { message in
+                                HStack(alignment: .top, spacing: 6) {
+                                    if message.isLocal { Spacer(minLength: 18) }
+                                    Text(message.isLocal ? "나" : "상대")
+                                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                                        .foregroundStyle(message.isLocal ? Color.accentColor : Color.secondary)
+                                    messageContent(message.text, emoticonSize: 54)
+                                    if !message.isLocal { Spacer(minLength: 18) }
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(
+                                    message.isLocal ? Color.accentColor.opacity(0.12) : Color.black.opacity(0.06),
+                                    in: RoundedRectangle(cornerRadius: 9)
+                                )
+                                .accessibilityElement(children: .combine)
+                                .id(message.id)
                             }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(
-                                message.isLocal ? Color.accentColor.opacity(0.12) : Color.black.opacity(0.06),
-                                in: RoundedRectangle(cornerRadius: 9)
-                            )
-                            .accessibilityElement(children: .combine)
                         }
+                    }
+                    .onAppear { scrollToLatestMessage(using: proxy) }
+                    .onChange(of: model.messageHistory.last?.id) { _, _ in
+                        scrollToLatestMessage(using: proxy)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: 130)
@@ -238,7 +245,7 @@ struct CompanionView: View {
             .contentShape(Rectangle())
             .onTapGesture { model.showBubble() }
             .accessibilityAction { model.showBubble() }
-            .overlay(alignment: .leading) {
+            .overlay(alignment: .bottomLeading) {
                 if model.isTodoEnabled {
                     Button { model.toggleTodoVisibility() } label: {
                         Image(systemName: model.isTodoVisible ? "doc.text.fill" : "doc.text")
@@ -249,7 +256,7 @@ struct CompanionView: View {
                             .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
-                    .offset(x: -42)
+                    .offset(x: -7, y: 7)
                     .accessibilityLabel(model.isTodoVisible ? "Todo List 닫기" : "Todo List 열기")
                     .help(model.isTodoVisible ? "Todo List 닫기" : "Todo List 열기")
                 }
@@ -349,10 +356,17 @@ struct CompanionView: View {
             Text(text)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(.primary)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(.leading)
                 .lineLimit(3)
                 .truncationMode(.tail)
                 .help(text)
+        }
+    }
+
+    private func scrollToLatestMessage(using proxy: ScrollViewProxy) {
+        guard let messageID = model.messageHistory.last?.id else { return }
+        DispatchQueue.main.async {
+            proxy.scrollTo(messageID, anchor: .bottom)
         }
     }
 
