@@ -3,8 +3,8 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
-version=${COUPLEMON_VERSION:-0.5.4}
-build=${COUPLEMON_BUILD:-16}
+version=${COUPLEMON_VERSION:-0.5.5}
+build=${COUPLEMON_BUILD:-17}
 
 swift build -c release
 binary_dir=$(swift build -c release --show-bin-path)
@@ -14,6 +14,7 @@ rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
 cp "$binary_dir/CoupleMon" "$app_dir/Contents/MacOS/CoupleMon"
 cp -R "$project_dir/Resources/DefaultPet" "$app_dir/Contents/Resources/DefaultPet"
+cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
 cp -R "$binary_dir/CoupleMon_CoupleMon.bundle" "$app_dir/Contents/Resources/"
 
 cat > "$app_dir/Contents/Info.plist" <<PLIST
@@ -24,6 +25,7 @@ cat > "$app_dir/Contents/Info.plist" <<PLIST
     <key>CFBundleDevelopmentRegion</key><string>ko</string>
     <key>CFBundleExecutable</key><string>CoupleMon</string>
     <key>CFBundleIdentifier</key><string>com.couplemon.app</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>CoupleMon</string>
     <key>CFBundlePackageType</key><string>APPL</string>

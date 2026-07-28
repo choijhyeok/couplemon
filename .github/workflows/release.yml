@@ -26,6 +26,7 @@ jobs:
           test "$(plutil -extract CFBundleShortVersionString raw dist/CoupleMon.app/Contents/Info.plist)" = "$version"
           codesign --verify --deep --strict --verbose=2 dist/CoupleMon.app
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/MacOS/CoupleMon$'
+          pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/AppIcon.icns$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/DefaultPet/pet.json$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/quokka.png$'
           test "$(pkgutil --payload-files dist/CoupleMon.pkg | grep -c '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/.*\.png$')" = 16
