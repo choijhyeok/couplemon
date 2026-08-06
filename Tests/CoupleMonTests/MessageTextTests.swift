@@ -63,6 +63,14 @@ final class MessageTextTests: XCTestCase {
         XCTAssertEqual(CoupleMonEmoticon(messageValue: "😀"), nil)
     }
 
+    func testCoupleMonAnimatedEmoticonMessageRoundTripsAndMoves() {
+        for emoticon in CoupleMonAnimatedEmoticon.allCases {
+            XCTAssertEqual(CoupleMonAnimatedEmoticon(messageValue: emoticon.messageValue), emoticon)
+            XCTAssertNotEqual(emoticon.motion(at: 0), emoticon.motion(at: 0.31))
+        }
+        XCTAssertEqual(CoupleMonAnimatedEmoticon(messageValue: "😀"), nil)
+    }
+
     func testAllEmoticonsLoadFromPackagedResourceLayout() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

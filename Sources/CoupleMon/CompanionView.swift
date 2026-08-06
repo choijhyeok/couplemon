@@ -305,24 +305,54 @@ struct CompanionView: View {
 
     private var emoticonPicker: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("CoupleMon 특전")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-
             ScrollView(.vertical) {
-                LazyVGrid(columns: Array(repeating: GridItem(.fixed(68)), count: 3), spacing: 8) {
-                    ForEach(CoupleMonEmoticon.allCases) { emoticon in
-                        Button { send(emoticon) } label: {
-                            VStack(spacing: 4) {
-                                emoticonImage(emoticon, size: 54)
-                                Text(emoticon.title)
-                                    .font(.system(size: 10, weight: .semibold, design: .rounded))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("특전 애니메이션")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(68)), count: 3), spacing: 8) {
+                        ForEach(CoupleMonAnimatedEmoticon.allCases) { emoticon in
+                            Button { send(emoticon) } label: {
+                                VStack(spacing: 4) {
+                                    emoticonImage(emoticon.emoticon, size: 54)
+                                        .overlay(alignment: .bottomTrailing) {
+                                            Image(systemName: "play.fill")
+                                                .font(.system(size: 7, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .frame(width: 16, height: 16)
+                                                .background(Color.accentColor, in: Circle())
+                                        }
+                                    Text(emoticon.title)
+                                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                }
+                                .frame(width: 68)
+                                .padding(.vertical, 6)
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
                             }
-                            .frame(width: 68)
-                            .padding(.vertical, 6)
-                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(emoticon.accessibilityLabel)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(emoticon.accessibilityLabel)
+                    }
+
+                    Divider()
+                    Text("CoupleMon 특전")
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
+
+                    LazyVGrid(columns: Array(repeating: GridItem(.fixed(68)), count: 3), spacing: 8) {
+                        ForEach(CoupleMonEmoticon.allCases) { emoticon in
+                            Button { send(emoticon) } label: {
+                                VStack(spacing: 4) {
+                                    emoticonImage(emoticon, size: 54)
+                                    Text(emoticon.title)
+                                        .font(.system(size: 10, weight: .semibold, design: .rounded))
+                                }
+                                .frame(width: 68)
+                                .padding(.vertical, 6)
+                                .background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(emoticon.accessibilityLabel)
+                        }
                     }
                 }
             }
@@ -354,7 +384,9 @@ struct CompanionView: View {
 
     @ViewBuilder
     private func messageContent(_ text: String, emoticonSize: CGFloat) -> some View {
-        if let emoticon = CoupleMonEmoticon(messageValue: text) {
+        if let emoticon = CoupleMonAnimatedEmoticon(messageValue: text) {
+            AnimatedEmoticonView(emoticon: emoticon, size: emoticonSize)
+        } else if let emoticon = CoupleMonEmoticon(messageValue: text) {
             emoticonImage(emoticon, size: emoticonSize)
         } else {
             Text(text)
@@ -394,6 +426,12 @@ struct CompanionView: View {
         restoreDraftFocus()
     }
 
+    private func send(_ emoticon: CoupleMonAnimatedEmoticon) {
+        model.send(emoticon.messageValue)
+        isEmoticonPickerPresented = false
+        restoreDraftFocus()
+    }
+
     private func insert(_ emoji: String) {
         guard draft.count < MessageText.maxLength else { return }
         draft.append(contentsOf: emoji)
@@ -413,6 +451,36 @@ struct CompanionView: View {
         DispatchQueue.main.async {
             draftIsFocused = true
             DispatchQueue.main.async { action?() }
+        }
+    }
+}
+
+private struct AnimatedEmoticonView: View {
+    let emoticon: CoupleMonAnimatedEmoticon
+    let size: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var startedAt = Date()
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 20.0, paused: reduceMotion)) { timeline in
+            let motion = reduceMotion
+                ? CoupleMonAnimatedEmoticon.Motion.identity
+                : emoticon.motion(at: timeline.date.timeIntervalSince(startedAt))
+
+            if let image = emoticon.emoticon.image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(CGFloat(motion.scale))
+                    .offset(x: CGFloat(motion.x), y: CGFloat(motion.y))
+                    .rotationEffect(.degrees(motion.rotation))
+                    .frame(width: size, height: size)
+                    .accessibilityLabel(emoticon.accessibilityLabel)
+            } else {
+                Text(emoticon.title)
+                    .frame(width: size, height: size)
+            }
         }
     }
 }

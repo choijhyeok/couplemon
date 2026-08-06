@@ -77,3 +77,77 @@ enum CoupleMonEmoticon: String, CaseIterable, Identifiable {
         self.init(rawValue: String(messageValue.dropFirst(prefix.count).dropLast(suffix.count)))
     }
 }
+
+enum CoupleMonAnimatedEmoticon: String, CaseIterable, Identifiable {
+    struct Motion: Equatable {
+        let scale: Double
+        let x: Double
+        let y: Double
+        let rotation: Double
+
+        static let identity = Motion(scale: 1, x: 0, y: 0, rotation: 0)
+    }
+
+    case houseViewing = "couple_house_viewing"
+    case movie = "couple_movie"
+    case date = "couple_date"
+    case developer = "couple_developer"
+    case bed = "couple_bed"
+
+    var id: String { rawValue }
+    var messageValue: String { "[[couplemon-animation:\(rawValue)]]" }
+
+    var emoticon: CoupleMonEmoticon {
+        switch self {
+        case .houseViewing: .coupleHouseViewing
+        case .movie: .coupleMovie
+        case .date: .coupleDate
+        case .developer: .coupleDeveloper
+        case .bed: .coupleBed
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .houseViewing: "집 구경"
+        case .movie: "영화 타임"
+        case .date: "데이트 중"
+        case .developer: "같이 코딩"
+        case .bed: "새근새근"
+        }
+    }
+
+    var accessibilityLabel: String { "움직이는 \(emoticon.accessibilityLabel)" }
+
+    func motion(at elapsed: TimeInterval) -> Motion {
+        let duration: TimeInterval
+        switch self {
+        case .houseViewing: duration = 0.9
+        case .movie: duration = 1.6
+        case .date: duration = 0.8
+        case .developer: duration = 0.45
+        case .bed: duration = 2
+        }
+        let wave = sin(elapsed * .pi * 2 / duration)
+
+        switch self {
+        case .houseViewing:
+            return Motion(scale: 1 + abs(wave) * 0.02, x: 0, y: -abs(wave) * 3, rotation: wave * 1.2)
+        case .movie:
+            return Motion(scale: 1 + (wave + 1) * 0.012, x: 0, y: 0, rotation: wave * 0.5)
+        case .date:
+            return Motion(scale: 1, x: wave * 1.5, y: -abs(wave) * 3, rotation: wave * 1.5)
+        case .developer:
+            return Motion(scale: 1, x: wave * 1.2, y: -abs(wave) * 0.8, rotation: wave * 0.5)
+        case .bed:
+            return Motion(scale: 1 + (wave + 1) * 0.009, x: 0, y: -(wave + 1) * 0.25, rotation: 0)
+        }
+    }
+
+    init?(messageValue: String) {
+        let prefix = "[[couplemon-animation:"
+        let suffix = "]]"
+        guard messageValue.hasPrefix(prefix), messageValue.hasSuffix(suffix) else { return nil }
+        self.init(rawValue: String(messageValue.dropFirst(prefix.count).dropLast(suffix.count)))
+    }
+}
