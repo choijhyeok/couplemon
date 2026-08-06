@@ -17,6 +17,11 @@ enum CoupleMonEmoticon: String, CaseIterable, Identifiable {
     case coupleKiss = "couple_kiss"
     case coupleCheer = "couple_cheer"
     case coupleMiss = "couple_miss"
+    case coupleHouseViewing = "couple_house_viewing"
+    case coupleMovie = "couple_movie"
+    case coupleDate = "couple_date"
+    case coupleDeveloper = "couple_developer"
+    case coupleBed = "couple_bed"
 
     var id: String { rawValue }
     var messageValue: String { "[[couplemon:\(rawValue)]]" }
@@ -39,6 +44,11 @@ enum CoupleMonEmoticon: String, CaseIterable, Identifiable {
         case .coupleKiss: ("뽀뽀", "수달에게 뽀뽀하는 쿼카")
         case .coupleCheer: ("힘내", "하이파이브하는 쿼카와 수달")
         case .coupleMiss: ("보고싶어", "서로 그리워하는 쿼카와 수달")
+        case .coupleHouseViewing: ("집 보러 가자", "함께 집을 보러 가는 쿼카와 수달")
+        case .coupleMovie: ("영화 보자", "함께 영화를 보는 쿼카와 수달")
+        case .coupleDate: ("데이트", "함께 데이트하는 쿼카와 수달")
+        case .coupleDeveloper: ("같이 개발", "함께 개발하는 쿼카와 수달")
+        case .coupleBed: ("같이 잘자", "한 침대에서 함께 잠든 쿼카와 수달")
         }
     }
 

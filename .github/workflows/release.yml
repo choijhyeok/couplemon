@@ -29,7 +29,8 @@ jobs:
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/AppIcon.icns$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/DefaultPet/pet.json$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/quokka.png$'
-          test "$(pkgutil --payload-files dist/CoupleMon.pkg | grep -c '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/.*\.png$')" = 16
+          pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/couple_bed.png$'
+          test "$(pkgutil --payload-files dist/CoupleMon.pkg | grep -c '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/.*\.png$')" = 21
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
