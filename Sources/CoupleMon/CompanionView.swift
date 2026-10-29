@@ -27,7 +27,13 @@ struct CompanionView: View {
         }
         .frame(width: model.isTodoVisible ? 600 : 320, height: 410, alignment: .trailing)
         .animation(.easeOut(duration: 0.2), value: model.isTodoVisible)
-        .onChange(of: model.chatFocusRequest) { _, _ in draftIsFocused = true }
+        .onChange(of: model.chatFocusRequest) { _, _ in
+            if let letter = model.drawingLetter {
+                model.openDrawingLetter(id: letter.id)
+            } else {
+                draftIsFocused = true
+            }
+        }
         .popover(isPresented: $isDrawingPreviewPresented) {
             if let drawingToPreview {
                 DrawingPreview(drawing: drawingToPreview)
@@ -39,15 +45,37 @@ struct CompanionView: View {
 
     private var companion: some View {
         VStack(spacing: 4) {
-            speechBubble
-                .opacity(model.isBubbleVisible ? 1 : 0)
-                .allowsHitTesting(model.isBubbleVisible)
+            ZStack(alignment: .bottom) {
+                speechBubble
+                    .opacity(model.isBubbleVisible && model.drawingLetter == nil ? 1 : 0)
+                    .allowsHitTesting(model.isBubbleVisible && model.drawingLetter == nil)
+                    .accessibilityHidden(!model.isBubbleVisible || model.drawingLetter != nil)
+                if let letter = model.drawingLetter {
+                    DrawingLetterView(
+                        letter: letter,
+                        isOpen: model.isDrawingLetterOpen,
+                        height: min(216, 382 - 150 * model.characterScale),
+                        onOpen: { model.openDrawingLetter(id: letter.id) },
+                        onClose: { model.dismissDrawingLetter(id: letter.id) }
+                    )
+                    .id(letter.id)
+                    .transition(.opacity)
+                }
+            }
+            .frame(maxHeight: .infinity, alignment: .bottom)
             resizableCharacter
         }
         .padding(12)
         .frame(width: 320, height: 410)
         .animation(.easeOut(duration: 0.2), value: model.isBubbleVisible)
-        .onAppear { model.showBubble() }
+        .animation(.easeOut(duration: 0.15), value: model.drawingLetter?.id)
+        .onChange(of: model.drawingLetter?.id) { _, id in
+            guard id != nil else { return }
+            draftIsFocused = false
+            isEmoticonPickerPresented = false
+            isDrawingPreviewPresented = false
+        }
+        .onAppear { if model.drawingLetter == nil { model.showBubble() } }
         .onChange(of: draftIsFocused) { _, isFocused in
             model.setMessageEditing(isFocused || isDrawingPresented || isDrawingPreviewPresented)
         }
@@ -208,7 +236,7 @@ struct CompanionView: View {
                     DrawingComposerView { drawing in
                         model.sendDrawing(drawing)
                         isDrawingPresented = false
-                        restoreDraftFocus()
+                        draftIsFocused = false
                     }
                 }
 

@@ -36,13 +36,19 @@ struct RealtimeCheck {
         var bReceipts = 0
         var todoReceived = false
         var disconnectObserved = false
+        let senderModel = AppModel()
+        let receiverModel = AppModel()
+        senderModel.onSendDrawing = { a.sendDrawing($0) }
         a.onMessage = { aMessages.append($0) }
         b.onMessage = { bMessages.append($0) }
         a.onPartnerChange = { partnerA = $0 }
         b.onPartnerChange = { partnerB = $0 }
         a.onSendError = { aError = $0; if $0 == nil { aReceipts += 1 } }
         b.onSendError = { if $0 == nil { bReceipts += 1 } }
-        b.onDrawing = { receivedDrawing = $0 }
+        b.onDrawing = {
+            receivedDrawing = $0
+            receiverModel.receiveDrawing($0)
+        }
         b.onTodoChanged = { todoReceived = true }
         a.onStateChange = {
             if case .failed = $0 { disconnectObserved = true }
@@ -59,12 +65,46 @@ struct RealtimeCheck {
         let drawing = DrawingMessage(strokes: [.init(
             color: .pink, width: 4, points: [.init(x: 0.1, y: 0.2), .init(x: 0.8, y: 0.9)]
         )])
-        a.sendDrawing(drawing)
+        senderModel.sendDrawing(drawing)
         a.sendTodoChanged()
         try await waitFor("Drawing, receipt, or Todo event missing") {
             receivedDrawing == drawing && aReceipts == 2 && todoReceived
         }
+        guard let sentLetter = senderModel.drawingLetter, let receivedLetter = receiverModel.drawingLetter,
+              sentLetter.isLocal, !receivedLetter.isLocal,
+              !senderModel.isBubbleVisible, !receiverModel.isBubbleVisible else {
+            throw CheckError.failed("Both peers must present letters before the chat bubble")
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        guard !senderModel.isDrawingLetterOpen, !receiverModel.isDrawingLetterOpen,
+              receiverModel.drawingLetter?.id == receivedLetter.id else {
+            throw CheckError.failed("Unopened letter must wait for a click")
+        }
+        senderModel.openDrawingLetter(id: sentLetter.id)
+        receiverModel.openDrawingLetter(id: receivedLetter.id)
+        try await Task.sleep(for: .milliseconds(600))
+        guard receiverModel.isDrawingLetterOpen else { throw CheckError.failed("Letter closed before reading") }
+        try await waitFor("Opened letters did not automatically close", seconds: 4) {
+            senderModel.drawingLetter == nil && receiverModel.drawingLetter == nil
+        }
+        guard senderModel.messageHistory.last?.drawing == drawing,
+              receiverModel.messageHistory.last?.drawing == drawing,
+              !senderModel.isBubbleVisible, !receiverModel.isBubbleVisible else {
+            throw CheckError.failed("Letter dismissal must preserve chat history without reopening it")
+        }
+        receiverModel.receiveDrawing(drawing)
+        let first = receiverModel.drawingLetter!
+        receiverModel.openDrawingLetter(id: first.id)
+        receiverModel.receiveDrawing(drawing)
+        receiverModel.dismissDrawingLetter(id: first.id)
+        guard let second = receiverModel.drawingLetter, second.id != first.id,
+              !receiverModel.isDrawingLetterOpen else { throw CheckError.failed("Letter queue or X close") }
+        receiverModel.dismissDrawingLetter(id: first.id)
+        guard receiverModel.drawingLetter?.id == second.id else { throw CheckError.failed("Stale letter dismissal") }
+        receiverModel.clearMessage()
+        guard receiverModel.drawingLetter == nil else { throw CheckError.failed("Clearing queued letters") }
         print("PASS: peers, bidirectional text, drawing, receipts, Todo")
+        print("PASS: sender/receiver letters, click to open, reading time, auto close, X close, queue, history")
 
         // Verify that a joined server channel is not confused with a reachable partner.
         let otherRoom = RealtimeSettings(

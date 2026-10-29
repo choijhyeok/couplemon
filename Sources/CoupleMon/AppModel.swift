@@ -10,6 +10,15 @@ final class AppModel: ObservableObject {
         var drawing: DrawingMessage? = nil
     }
 
+    struct DrawingLetter: Identifiable, Equatable {
+        let id = UUID()
+        let drawing: DrawingMessage
+        let isLocal: Bool
+    }
+
+    static let letterUnfoldDuration = 0.45
+    static let letterReadingDuration = 2.0
+
     enum TodoListKind: String, CaseIterable, Identifiable {
         case mine
         case partner
@@ -96,6 +105,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var displayedMessage: String
     @Published private(set) var messageHistory: [ConversationMessage] = []
     @Published private(set) var displayedDrawing: DrawingMessage?
+    @Published private(set) var drawingLetter: DrawingLetter?
+    @Published private(set) var isDrawingLetterOpen = false
     @Published var realtimeState: CoupleRealtimeState = .notConfigured
     @Published var isPartnerReachable = false
     @Published var sendError: String?
@@ -123,6 +134,8 @@ final class AppModel: ObservableObject {
     private(set) var pendingTodoMutations: [TodoMutation]
     private(set) var todoMutationRevision = 0
     private var bubbleDismissTask: Task<Void, Never>?
+    private var letterDismissTask: Task<Void, Never>?
+    private var pendingDrawingLetters: [DrawingLetter] = []
     private(set) var isEditingMessage = false
 
     init(
@@ -190,12 +203,46 @@ final class AppModel: ObservableObject {
     func sendDrawing(_ drawing: DrawingMessage) {
         guard drawing.isValid else { return }
         record("손그림", isLocal: true, drawing: drawing)
+        enqueueDrawingLetter(drawing, isLocal: true)
         onSendDrawing?(drawing)
     }
 
     func receiveDrawing(_ drawing: DrawingMessage) {
         guard drawing.isValid else { return }
         record("손그림", isLocal: false, drawing: drawing)
+        enqueueDrawingLetter(drawing, isLocal: false)
+    }
+
+    func openDrawingLetter(id: UUID) {
+        guard drawingLetter?.id == id, !isDrawingLetterOpen else { return }
+        isDrawingLetterOpen = true
+        letterDismissTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .seconds(Self.letterUnfoldDuration + Self.letterReadingDuration))
+            } catch { return }
+            self?.dismissDrawingLetter(id: id)
+        }
+    }
+
+    func dismissDrawingLetter(id: UUID) {
+        guard drawingLetter?.id == id else { return }
+        letterDismissTask?.cancel()
+        letterDismissTask = nil
+        isDrawingLetterOpen = false
+        drawingLetter = nil
+        dismissChatInput()
+        presentNextDrawingLetter()
+    }
+
+    private func enqueueDrawingLetter(_ drawing: DrawingMessage, isLocal: Bool) {
+        pendingDrawingLetters.append(DrawingLetter(drawing: drawing, isLocal: isLocal))
+        dismissChatInput()
+        presentNextDrawingLetter()
+    }
+
+    private func presentNextDrawingLetter() {
+        guard drawingLetter == nil, !pendingDrawingLetters.isEmpty else { return }
+        drawingLetter = pendingDrawingLetters.removeFirst()
     }
 
     var connectionNotice: String? {
@@ -213,6 +260,11 @@ final class AppModel: ObservableObject {
         displayedMessage = ""
         displayedDrawing = nil
         messageHistory.removeAll()
+        letterDismissTask?.cancel()
+        letterDismissTask = nil
+        pendingDrawingLetters.removeAll()
+        drawingLetter = nil
+        isDrawingLetterOpen = false
         isBubbleVisible = false
         bubbleDismissTask?.cancel()
     }

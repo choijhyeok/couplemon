@@ -52,6 +52,9 @@ final class DrawingMessageTests: XCTestCase {
         XCTAssertEqual(sent, drawing)
         XCTAssertEqual(model.displayedDrawing, drawing)
         XCTAssertEqual(model.messageHistory.last?.isLocal, true)
+        XCTAssertEqual(model.drawingLetter?.drawing, drawing)
+        XCTAssertEqual(model.drawingLetter?.isLocal, true)
+        XCTAssertFalse(model.isBubbleVisible)
         model.receiveDrawing(drawing)
         XCTAssertEqual(model.messageHistory.last?.isLocal, false)
         model.receive("좋아 💛")
@@ -60,6 +63,72 @@ final class DrawingMessageTests: XCTestCase {
         model.clearMessage()
         XCTAssertTrue(model.messageHistory.isEmpty)
         XCTAssertNil(model.displayedDrawing)
+        XCTAssertNil(model.drawingLetter)
+    }
+
+    @MainActor
+    func testLetterWaitsForClickThenAutomaticallyCloses() async throws {
+        let model = AppModel()
+        let drawing = DrawingMessage(strokes: [stroke])
+        model.receiveDrawing(drawing)
+        let letter = try XCTUnwrap(model.drawingLetter)
+        XCTAssertFalse(letter.isLocal)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(model.drawingLetter?.id, letter.id)
+        XCTAssertFalse(model.isDrawingLetterOpen)
+
+        model.openDrawingLetter(id: letter.id)
+        XCTAssertTrue(model.isDrawingLetterOpen)
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertEqual(model.drawingLetter?.id, letter.id)
+        let deadline = Date().addingTimeInterval(4)
+        while model.drawingLetter != nil, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertNil(model.drawingLetter)
+        XCTAssertFalse(model.isDrawingLetterOpen)
+        XCTAssertFalse(model.isBubbleVisible)
+        XCTAssertEqual(model.messageHistory.last?.drawing, drawing)
+    }
+
+    @MainActor
+    func testClosingLetterAdvancesQueueAndIgnoresOldClose() throws {
+        let model = AppModel()
+        let drawing = DrawingMessage(strokes: [stroke])
+        model.sendDrawing(drawing)
+        let first = try XCTUnwrap(model.drawingLetter)
+        model.openDrawingLetter(id: first.id)
+        model.receiveDrawing(drawing)
+        XCTAssertEqual(model.drawingLetter?.id, first.id)
+        XCTAssertTrue(model.isDrawingLetterOpen)
+
+        model.dismissDrawingLetter(id: first.id)
+        let second = try XCTUnwrap(model.drawingLetter)
+        XCTAssertNotEqual(second.id, first.id)
+        XCTAssertFalse(second.isLocal)
+        XCTAssertFalse(model.isDrawingLetterOpen)
+        model.dismissDrawingLetter(id: first.id)
+        XCTAssertEqual(model.drawingLetter?.id, second.id)
+        model.openDrawingLetter(id: second.id)
+        model.dismissDrawingLetter(id: second.id)
+        XCTAssertNil(model.drawingLetter)
+        XCTAssertEqual(model.messageHistory.map(\.isLocal), [true, false])
+        XCTAssertEqual(model.messageHistory.compactMap(\.drawing), [drawing, drawing])
+    }
+
+    @MainActor
+    func testClearingMessagesAlsoCancelsPendingLetters() throws {
+        let model = AppModel()
+        let drawing = DrawingMessage(strokes: [stroke])
+        model.receiveDrawing(drawing)
+        let first = try XCTUnwrap(model.drawingLetter)
+        model.openDrawingLetter(id: first.id)
+        model.receiveDrawing(drawing)
+        model.clearMessage()
+        model.dismissDrawingLetter(id: first.id)
+        XCTAssertNil(model.drawingLetter)
+        XCTAssertFalse(model.isDrawingLetterOpen)
+        XCTAssertTrue(model.messageHistory.isEmpty)
     }
 
     @MainActor
