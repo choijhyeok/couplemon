@@ -9,10 +9,14 @@ final class OverlayPanel: NSPanel {
 @MainActor
 final class OverlayPanelController {
     let panel: NSPanel
+    private let model: AppModel
+    private(set) var terminalController: TerminalWindowController?
+    var onTerminalModeChange: ((Bool) -> Void)?
     private let compactSize = CGSize(width: 320, height: 410)
     private let expandedSize = CGSize(width: 600, height: 410)
 
     init(model: AppModel) {
+        self.model = model
         panel = OverlayPanel(
             contentRect: CGRect(origin: .zero, size: compactSize),
             styleMask: .borderless,
@@ -33,13 +37,30 @@ final class OverlayPanelController {
         panel.setFrameOrigin(
             CGPoint(x: visibleFrame.maxX - compactSize.width - 24, y: visibleFrame.minY + 24)
         )
+        model.onTerminalModeChange = { [weak self] enabled in
+            guard let self else { return }
+            if enabled {
+                self.panel.makeFirstResponder(nil)
+                self.panel.orderOut(nil)
+                self.showTerminal()
+            } else {
+                self.terminalController?.hide()
+                self.panel.orderFrontRegardless()
+                self.model.showBubble()
+            }
+            self.onTerminalModeChange?(enabled)
+        }
     }
 
     func show() {
-        panel.orderFrontRegardless()
+        if model.isTerminalMode { showTerminal() } else { panel.orderFrontRegardless() }
     }
 
     func toggle() {
+        if model.isTerminalMode {
+            if terminalController?.window.isVisible == true { terminalController?.hide() } else { showTerminal() }
+            return
+        }
         panel.isVisible ? panel.orderOut(nil) : show()
     }
 
@@ -52,11 +73,24 @@ final class OverlayPanelController {
     }
 
     func focusChatInput() {
+        if model.isTerminalMode {
+            showTerminal()
+            return
+        }
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
     }
 
     func dismissChatInput() {
+        if model.isTerminalMode {
+            terminalController?.window.makeFirstResponder(nil)
+            return
+        }
         panel.makeFirstResponder(nil)
+    }
+
+    private func showTerminal() {
+        if terminalController == nil { terminalController = TerminalWindowController(model: model) }
+        terminalController?.show()
     }
 }

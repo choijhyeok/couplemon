@@ -3,7 +3,6 @@ import SwiftUI
 
 struct CompanionView: View {
     @ObservedObject var model: AppModel
-    @State private var draft = ""
     @State private var resizeStartScale: CGFloat?
     @State private var todoDraft = ""
     @State private var selectedTodoList = AppModel.TodoListKind.mine
@@ -27,6 +26,14 @@ struct CompanionView: View {
         }
         .frame(width: model.isTodoVisible ? 600 : 320, height: 410, alignment: .trailing)
         .animation(.easeOut(duration: 0.2), value: model.isTodoVisible)
+        .onChange(of: model.isTerminalMode) { _, enabled in
+            if enabled {
+                draftIsFocused = false
+                isEmoticonPickerPresented = false
+                isDrawingPresented = false
+                isDrawingPreviewPresented = false
+            }
+        }
         .onChange(of: model.chatFocusRequest) { _, _ in
             if let letter = model.drawingLetter {
                 model.openDrawingLetter(id: letter.id)
@@ -240,7 +247,15 @@ struct CompanionView: View {
                     }
                 }
 
-                TextField("한마디 보내기", text: $draft)
+                Button { model.setTerminalMode(true) } label: {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 17))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("터미널 모드 열기")
+                .help("터미널 모드 열기")
+
+                TextField("한마디 보내기", text: $model.messageDraft)
                     .textFieldStyle(.plain)
                     .focused($draftIsFocused)
                     .onSubmit(send)
@@ -250,7 +265,7 @@ struct CompanionView: View {
                         .font(.system(size: 20))
                 }
                 .buttonStyle(.plain)
-                .disabled(MessageText.normalize(draft).isEmpty)
+                .disabled(MessageText.normalize(model.messageDraft).isEmpty)
                 .accessibilityLabel("메시지 보내기")
             }
             .padding(.horizontal, 11)
@@ -357,10 +372,7 @@ struct CompanionView: View {
     }
 
     private func send() {
-        model.send(draft)
-        if !MessageText.normalize(draft).isEmpty {
-            draft = ""
-        }
+        model.sendDraft()
     }
 
     private func addTodo() {
@@ -508,8 +520,8 @@ struct CompanionView: View {
     }
 
     private func insert(_ emoji: String) {
-        guard draft.count < MessageText.maxLength else { return }
-        draft.append(contentsOf: emoji)
+        guard model.messageDraft.count < MessageText.maxLength else { return }
+        model.messageDraft.append(contentsOf: emoji)
         isEmoticonPickerPresented = false
         restoreDraftFocus()
     }

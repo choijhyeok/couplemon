@@ -38,9 +38,13 @@ struct RealtimeCheck {
         var disconnectObserved = false
         let senderModel = AppModel()
         let receiverModel = AppModel()
+        senderModel.onSend = { a.send($0) }
         senderModel.onSendDrawing = { a.sendDrawing($0) }
         a.onMessage = { aMessages.append($0) }
-        b.onMessage = { bMessages.append($0) }
+        b.onMessage = {
+            bMessages.append($0)
+            receiverModel.receive($0)
+        }
         a.onPartnerChange = { partnerA = $0 }
         b.onPartnerChange = { partnerB = $0 }
         a.onSendError = { aError = $0; if $0 == nil { aReceipts += 1 } }
@@ -133,6 +137,32 @@ struct RealtimeCheck {
         await a.reconnect()
         b.send("잠자기 복귀 후 메시지")
         try await waitFor("Explicit wake reconnect failed") { aMessages.last == "잠자기 복귀 후 메시지" }
+
+        senderModel.setTerminalMode(true)
+        receiverModel.setTerminalMode(true)
+        senderModel.messageDraft = "터미널 모드 메시지"
+        senderModel.sendDraft()
+        try await waitFor("Terminal draft did not reach partner") {
+            receiverModel.terminalHistory.last?.text == "터미널 모드 메시지"
+        }
+        let previousImageID = receiverModel.terminalHistory.last?.id
+        senderModel.sendDrawing(drawing)
+        try await waitFor("Terminal drawing did not reach partner") {
+            receiverModel.terminalHistory.last?.drawing == drawing
+                && receiverModel.terminalHistory.last?.id != previousImageID
+        }
+        guard senderModel.drawingLetter == nil, receiverModel.drawingLetter == nil,
+              !senderModel.isBubbleVisible, !receiverModel.isBubbleVisible,
+              receiverModel.terminalHistory.last?.attachmentNumber != nil,
+              senderModel.messageDraft.isEmpty else {
+            throw CheckError.failed("Terminal mode exposed pet notifications or lost the attachment")
+        }
+        senderModel.setTerminalMode(false)
+        receiverModel.setTerminalMode(false)
+        guard senderModel.drawingLetter == nil, receiverModel.drawingLetter == nil else {
+            throw CheckError.failed("Terminal drawings must not reappear as pending letters")
+        }
+        print("PASS: terminal mode live text/drawing, shared draft, attachment labels, suppressed pet notifications")
         await a.disconnect()
         await b.disconnect()
         print("PASS: socket loss, automatic recovery, wake reconnect")

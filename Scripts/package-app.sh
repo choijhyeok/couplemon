@@ -3,8 +3,8 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
-version=${COUPLEMON_VERSION:-0.5.9}
-build=${COUPLEMON_BUILD:-21}
+version=${COUPLEMON_VERSION:-0.5.10}
+build=${COUPLEMON_BUILD:-22}
 
 swift build -c release
 binary_dir=$(swift build -c release --show-bin-path)

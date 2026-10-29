@@ -10,6 +10,7 @@ final class MenuBarController: NSObject {
     var onToggleTodoList: (() -> Void)?
     var onToggleTodoVisibility: (() -> Void)?
     var onToggleChatInput: (() -> Void)?
+    var onToggleTerminalMode: (() -> Void)?
     var onIncreaseCharacterSize: (() -> Void)?
     var onDecreaseCharacterSize: (() -> Void)?
     var onResetCharacterSize: (() -> Void)?
@@ -25,6 +26,7 @@ final class MenuBarController: NSObject {
     private var copyRoomCodeItem: NSMenuItem!
     private var todoListItem: NSMenuItem!
     private var reconnectItem: NSMenuItem!
+    private var terminalModeItem: NSMenuItem!
     private var realtimeState: CoupleRealtimeState = .notConfigured
     private var isPartnerReachable = false
 
@@ -34,6 +36,8 @@ final class MenuBarController: NSObject {
 
         let menu = NSMenu()
         menu.addItem(item("보이기 / 숨기기", action: #selector(toggleOverlay)))
+        terminalModeItem = item("터미널 모드 열기", action: #selector(toggleTerminalMode))
+        menu.addItem(terminalModeItem)
         menu.addItem(.separator())
         menu.addItem(item("Codex 애니메이션 펫 선택…", action: #selector(chooseHatchPet)))
         menu.addItem(item("일반 이미지 선택…", action: #selector(chooseCharacter)))
@@ -104,6 +108,14 @@ final class MenuBarController: NSObject {
         todoListItem.state = isEnabled ? .on : .off
     }
 
+    func setTerminalMode(_ enabled: Bool) {
+        terminalModeItem.title = enabled ? "기본 화면으로 돌아가기" : "터미널 모드 열기"
+        statusItem.button?.image = NSImage(
+            systemSymbolName: enabled ? "terminal" : "heart.fill",
+            accessibilityDescription: enabled ? "Codex" : "CoupleMon"
+        )
+    }
+
     private func item(_ title: String, action: Selector, keyEquivalent: String = "") -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: keyEquivalent)
         item.target = self
@@ -118,6 +130,7 @@ final class MenuBarController: NSObject {
     @objc private func toggleTodoList() { onToggleTodoList?() }
     @objc private func toggleTodoVisibility() { onToggleTodoVisibility?() }
     @objc private func toggleChatInput() { onToggleChatInput?() }
+    @objc private func toggleTerminalMode() { onToggleTerminalMode?() }
     @objc private func increaseCharacterSize() { onIncreaseCharacterSize?() }
     @objc private func decreaseCharacterSize() { onDecreaseCharacterSize?() }
     @objc private func resetCharacterSize() { onResetCharacterSize?() }

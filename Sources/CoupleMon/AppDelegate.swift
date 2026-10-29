@@ -24,6 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlayController = OverlayPanelController(model: model)
         menuBarController = MenuBarController()
         menuBarController.onToggleOverlay = { [weak self] in self?.overlayController.toggle() }
+        menuBarController.onToggleTerminalMode = { [weak self] in
+            guard let self else { return }
+            self.model.setTerminalMode(!self.model.isTerminalMode)
+        }
+        overlayController.onTerminalModeChange = { [weak self] enabled in
+            self?.menuBarController.setTerminalMode(enabled)
+        }
         menuBarController.onChooseCharacter = { [weak self] in self?.chooseCharacter() }
         menuBarController.onChooseHatchPet = { [weak self] in self?.chooseHatchPet() }
         menuBarController.onIncreaseCharacterSize = { [weak self] in self?.model.resizeCharacter(by: 0.1) }

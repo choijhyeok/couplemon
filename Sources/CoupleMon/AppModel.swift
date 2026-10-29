@@ -8,6 +8,12 @@ final class AppModel: ObservableObject {
         let text: String
         let isLocal: Bool
         var drawing: DrawingMessage? = nil
+        var attachmentNumber: Int? = nil
+
+        var isImageAttachment: Bool {
+            drawing != nil || CoupleMonEmoticon(messageValue: text) != nil
+                || CoupleMonAnimatedEmoticon(messageValue: text) != nil
+        }
     }
 
     struct DrawingLetter: Identifiable, Equatable {
@@ -104,6 +110,10 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var displayedMessage: String
     @Published private(set) var messageHistory: [ConversationMessage] = []
+    @Published private(set) var terminalHistory: [ConversationMessage] = []
+    @Published private(set) var isTerminalMode = false
+    @Published private(set) var terminalFocusRequest = 0
+    @Published var messageDraft = ""
     @Published private(set) var displayedDrawing: DrawingMessage?
     @Published private(set) var drawingLetter: DrawingLetter?
     @Published private(set) var isDrawingLetterOpen = false
@@ -125,6 +135,7 @@ final class AppModel: ObservableObject {
     var onCharacterScaleChange: ((CGFloat) -> Void)?
     var onTodoVisibilityChange: ((Bool) -> Void)?
     var onTodoMutation: (() -> Void)?
+    var onTerminalModeChange: ((Bool) -> Void)?
 
     private let characterURL: URL
     private let petDirectory: URL
@@ -136,6 +147,7 @@ final class AppModel: ObservableObject {
     private var bubbleDismissTask: Task<Void, Never>?
     private var letterDismissTask: Task<Void, Never>?
     private var pendingDrawingLetters: [DrawingLetter] = []
+    private var nextAttachmentNumber = 1
     private(set) var isEditingMessage = false
 
     init(
@@ -194,6 +206,30 @@ final class AppModel: ObservableObject {
         onSend?(message)
     }
 
+    func sendDraft() {
+        guard !MessageText.normalize(messageDraft).isEmpty else { return }
+        send(messageDraft)
+        messageDraft = ""
+    }
+
+    func setTerminalMode(_ enabled: Bool) {
+        guard isTerminalMode != enabled else { return }
+        isTerminalMode = enabled
+        if enabled {
+            letterDismissTask?.cancel()
+            letterDismissTask = nil
+            pendingDrawingLetters.removeAll()
+            drawingLetter = nil
+            isDrawingLetterOpen = false
+            dismissChatInput()
+        }
+        onTerminalModeChange?(enabled)
+    }
+
+    func requestTerminalFocus() {
+        terminalFocusRequest += 1
+    }
+
     func receive(_ rawValue: String) {
         let message = MessageText.normalize(rawValue)
         guard !message.isEmpty else { return }
@@ -235,6 +271,7 @@ final class AppModel: ObservableObject {
     }
 
     private func enqueueDrawingLetter(_ drawing: DrawingMessage, isLocal: Bool) {
+        guard !isTerminalMode else { return }
         pendingDrawingLetters.append(DrawingLetter(drawing: drawing, isLocal: isLocal))
         dismissChatInput()
         presentNextDrawingLetter()
@@ -260,6 +297,8 @@ final class AppModel: ObservableObject {
         displayedMessage = ""
         displayedDrawing = nil
         messageHistory.removeAll()
+        terminalHistory.removeAll()
+        nextAttachmentNumber = 1
         letterDismissTask?.cancel()
         letterDismissTask = nil
         pendingDrawingLetters.removeAll()
@@ -371,6 +410,10 @@ final class AppModel: ObservableObject {
     }
 
     func requestChatFocus() {
+        if isTerminalMode {
+            requestTerminalFocus()
+            return
+        }
         showBubble()
         chatFocusRequest += 1
     }
@@ -397,11 +440,13 @@ final class AppModel: ObservableObject {
     }
 
     func showBubble() {
+        guard !isTerminalMode else { return }
         isBubbleVisible = true
         scheduleBubbleDismissal()
     }
 
     func setMessageEditing(_ isEditing: Bool) {
+        guard !isTerminalMode else { return }
         isEditingMessage = isEditing
         if isEditing {
             bubbleDismissTask?.cancel()
@@ -426,8 +471,15 @@ final class AppModel: ObservableObject {
         sendError = nil
         displayedMessage = message
         displayedDrawing = drawing
-        messageHistory.append(ConversationMessage(text: message, isLocal: isLocal, drawing: drawing))
+        var entry = ConversationMessage(text: message, isLocal: isLocal, drawing: drawing)
+        if entry.isImageAttachment {
+            entry.attachmentNumber = nextAttachmentNumber
+            nextAttachmentNumber += 1
+        }
+        messageHistory.append(entry)
         messageHistory = Array(messageHistory.suffix(5))
+        terminalHistory.append(entry)
+        terminalHistory = Array(terminalHistory.suffix(200))
         showBubble()
     }
 
