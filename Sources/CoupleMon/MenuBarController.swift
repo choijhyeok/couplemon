@@ -14,6 +14,8 @@ final class MenuBarController: NSObject {
     var onDecreaseCharacterSize: (() -> Void)?
     var onResetCharacterSize: (() -> Void)?
     var onConfigureRealtime: (() -> Void)?
+    var onReconnect: (() -> Void)?
+    var onConnectionHelp: (() -> Void)?
     var onCopyRoomCode: (() -> Void)?
     var onCheckForUpdates: (() -> Void)?
 
@@ -22,6 +24,9 @@ final class MenuBarController: NSObject {
     private var realtimeStatusItem: NSMenuItem!
     private var copyRoomCodeItem: NSMenuItem!
     private var todoListItem: NSMenuItem!
+    private var reconnectItem: NSMenuItem!
+    private var realtimeState: CoupleRealtimeState = .notConfigured
+    private var isPartnerReachable = false
 
     override init() {
         super.init()
@@ -49,6 +54,10 @@ final class MenuBarController: NSObject {
         menu.addItem(item("채팅 입력창 열기 / 닫기 (⌃⌥Space)", action: #selector(toggleChatInput)))
         menu.addItem(.separator())
         menu.addItem(item("실시간 연결 설정…", action: #selector(configureRealtime)))
+        reconnectItem = item("지금 다시 연결", action: #selector(reconnect))
+        reconnectItem.isEnabled = false
+        menu.addItem(reconnectItem)
+        menu.addItem(item("연결 오류 및 해결 방법…", action: #selector(connectionHelp)))
         copyRoomCodeItem = item("연결 코드 복사", action: #selector(copyRoomCode))
         copyRoomCodeItem.isEnabled = false
         menu.addItem(copyRoomCodeItem)
@@ -66,7 +75,8 @@ final class MenuBarController: NSObject {
     }
 
     func setRealtimeState(_ state: CoupleRealtimeState) {
-        realtimeStatusItem.title = state.menuTitle
+        realtimeState = state
+        updateRealtimeTitle()
         if case let .failed(reason) = state {
             realtimeStatusItem.toolTip = reason
         } else {
@@ -74,8 +84,20 @@ final class MenuBarController: NSObject {
         }
     }
 
+    func setPartnerReachable(_ reachable: Bool) {
+        isPartnerReachable = reachable
+        updateRealtimeTitle()
+    }
+
+    private func updateRealtimeTitle() {
+        realtimeStatusItem.title = realtimeState == .connected
+            ? (isPartnerReachable ? "실시간: 상대 응답 확인됨" : "실시간: 서버 연결됨 · 상대 응답 대기")
+            : realtimeState.menuTitle
+    }
+
     func setRoomCodeAvailable(_ isAvailable: Bool) {
         copyRoomCodeItem.isEnabled = isAvailable
+        reconnectItem.isEnabled = isAvailable
     }
 
     func setTodoEnabled(_ isEnabled: Bool) {
@@ -100,6 +122,8 @@ final class MenuBarController: NSObject {
     @objc private func decreaseCharacterSize() { onDecreaseCharacterSize?() }
     @objc private func resetCharacterSize() { onResetCharacterSize?() }
     @objc private func configureRealtime() { onConfigureRealtime?() }
+    @objc private func reconnect() { onReconnect?() }
+    @objc private func connectionHelp() { onConnectionHelp?() }
     @objc private func copyRoomCode() { onCopyRoomCode?() }
     @objc private func checkForUpdates() { onCheckForUpdates?() }
     @objc private func quit() { NSApplication.shared.terminate(nil) }

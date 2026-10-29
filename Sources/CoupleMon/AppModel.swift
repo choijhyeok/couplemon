@@ -7,6 +7,7 @@ final class AppModel: ObservableObject {
         let id = UUID()
         let text: String
         let isLocal: Bool
+        var drawing: DrawingMessage? = nil
     }
 
     enum TodoListKind: String, CaseIterable, Identifiable {
@@ -94,6 +95,10 @@ final class AppModel: ObservableObject {
 
     @Published private(set) var displayedMessage: String
     @Published private(set) var messageHistory: [ConversationMessage] = []
+    @Published private(set) var displayedDrawing: DrawingMessage?
+    @Published var realtimeState: CoupleRealtimeState = .notConfigured
+    @Published var isPartnerReachable = false
+    @Published var sendError: String?
     @Published private(set) var characterImage: NSImage?
     @Published private(set) var hatchPet: HatchPet?
     @Published private(set) var characterScale: CGFloat
@@ -105,6 +110,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var chatFocusRequest = 0
 
     var onSend: ((String) -> Void)?
+    var onSendDrawing: ((DrawingMessage) -> Void)?
     var onCharacterScaleChange: ((CGFloat) -> Void)?
     var onTodoVisibilityChange: ((Bool) -> Void)?
     var onTodoMutation: (() -> Void)?
@@ -181,8 +187,31 @@ final class AppModel: ObservableObject {
         record(message, isLocal: false)
     }
 
+    func sendDrawing(_ drawing: DrawingMessage) {
+        guard drawing.isValid else { return }
+        record("손그림", isLocal: true, drawing: drawing)
+        onSendDrawing?(drawing)
+    }
+
+    func receiveDrawing(_ drawing: DrawingMessage) {
+        guard drawing.isValid else { return }
+        record("손그림", isLocal: false, drawing: drawing)
+    }
+
+    var connectionNotice: String? {
+        if let sendError { return sendError }
+        switch realtimeState {
+        case .notConfigured: return "연결 설정 전에는 내 화면에만 표시됩니다."
+        case .connecting: return "연결 중 · 지금 보내면 상대에게 전달되지 않습니다."
+        case .failed: return "연결 끊김 · 메뉴에서 연결 오류 및 해결 방법을 확인하세요."
+        case .connected:
+            return isPartnerReachable ? nil : "상대 응답 대기 · 양쪽 앱과 연결 설정을 확인하세요."
+        }
+    }
+
     func clearMessage() {
         displayedMessage = ""
+        displayedDrawing = nil
         messageHistory.removeAll()
         isBubbleVisible = false
         bubbleDismissTask?.cancel()
@@ -341,9 +370,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func record(_ message: String, isLocal: Bool) {
+    private func record(_ message: String, isLocal: Bool, drawing: DrawingMessage? = nil) {
+        sendError = nil
         displayedMessage = message
-        messageHistory.append(ConversationMessage(text: message, isLocal: isLocal))
+        displayedDrawing = drawing
+        messageHistory.append(ConversationMessage(text: message, isLocal: isLocal, drawing: drawing))
         messageHistory = Array(messageHistory.suffix(5))
         showBubble()
     }

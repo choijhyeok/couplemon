@@ -9,6 +9,8 @@
 - Codex pet v1/v2 `pet.json` + `spritesheet.webp` 선택, 검증, idle 애니메이션 재생
 - Supabase Realtime Broadcast를 통한 두 Mac 말풍선·이모지 동기화
 - macOS 이모지 선택기와 120자 말풍선 입력
+- 채팅창 연필 버튼으로 손그림 전송: 8색, 펜 굵기, 되돌리기, 전체 지우기
+- 서버 연결·상대 응답 구분, 메시지 수신 확인, 끊김 재시도와 잠자기 복귀 재연결
 - 쿼카·수달·커플 반응 CoupleMon 전용 이모티콘 16종
 - `나`/`상대`를 구분한 최근 대화 5개 표시
 - 내 것·상대 것·커플 공용으로 나뉘며 DB에 보존되는 실시간 Todo List
@@ -31,6 +33,21 @@ Supabase 설정 전에는 로컬로만 동작하고, 설정 후에는 같은 연
 
 메시지와 이모지는 저장하지 않고 Realtime Broadcast로만 전달합니다. Todo만 DB에 저장되며 상대 변경 알림은 같은 채널로 전달됩니다. 연결 코드는 DB 접근 권한 역할도 하므로 외부에 공개하지 마세요.
 로그인 없는 2인용 구조라 같은 연결 코드를 아는 기기는 신뢰된 상대방으로 간주합니다.
+
+### 연결됨인데 서로 메시지가 안 올 때
+
+기존 버전의 `연결됨`은 서버 채널 구독 상태만 표시하며, 상대 접속이나 메시지 전달을 보장하지 않습니다.
+
+1. [Supabase 대시보드](https://supabase.com/dashboard)에서 기존 프로젝트 상태를 확인합니다. `Paused`라면 `Restore`로 복구하고 프로젝트가 활성화될 때까지 기다립니다. 무료 프로젝트는 미사용으로 일시 중지될 수 있습니다([공식 안내](https://supabase.com/docs/guides/platform/free-project-pausing)).
+2. 두 Mac의 **실시간 연결 설정…**에서 Project URL, Client key, 연결 코드가 모두 같은지 확인합니다. 프로젝트를 새로 만들었다면 양쪽 설정을 바꾸고 `Supabase/schema.sql`도 새 프로젝트에서 실행합니다. 새 프로젝트는 기존 Todo를 자동 복구하지 않습니다.
+3. 두 Mac에서 같은 최신 빌드를 실행하고 **지금 다시 연결**을 누릅니다. **연결 오류 및 해결 방법…**에서 최근 오류도 볼 수 있습니다.
+4. **실시간: 상대 응답 확인됨** 상태에서 양방향 메시지를 확인합니다. 서버만 연결된 상태는 **서버 연결됨 · 상대 응답 대기**로 표시됩니다. 상대가 이전 버전이면 응답 확인을 지원하지 않으므로 두 Mac 모두 업데이트해야 합니다.
+
+메시지 수신 확인이 8초 안에 오지 않으면 채팅창에 안내가 표시됩니다. 수신 확인이 없다는 것만으로 미전달이 확정되지는 않습니다. 상대가 오프라인일 때 보낸 메시지·이모지·손그림은 저장하거나 자동 재전송하지 않으므로 연결 복구 후 다시 보내세요.
+
+### 손그림 보내기
+
+채팅 입력창에서 **연필 버튼 → 그리기 → 보내기**를 선택하면 상대 캐릭터의 말풍선과 최근 대화에 표시됩니다. 받은 그림을 누르면 크게 볼 수 있고 흰색 펜으로 부분 지우기도 가능합니다. 손그림은 두 Mac 모두 기능을 지원하는 빌드가 필요합니다. 기존 메시지와 동일하게 DB에 저장되지 않으며, 그리거나 크게 보는 도중에는 말풍선을 자동으로 숨기지 않습니다.
 
 ## Codex 애니메이션 펫
 
@@ -64,8 +81,14 @@ swift test
 Xcode 없이 Command Line Tools만 설치된 환경에서는 XCTest를 찾지 못할 수 있습니다. 이 경우 핵심 입력 규칙을 직접 검사할 수 있습니다.
 
 ```bash
-swiftc Sources/CoupleMon/MessageText.swift Sources/CoupleMon/RealtimeSettings.swift Sources/CoupleMon/UpdateService.swift Sources/CoupleMon/HatchPetContract.swift Sources/CoupleMon/HatchPetPackage.swift Checks/main.swift -o .build/message-check
+swiftc Sources/CoupleMon/MessageText.swift Sources/CoupleMon/RealtimeSettings.swift Sources/CoupleMon/DrawingMessage.swift Sources/CoupleMon/UpdateService.swift Sources/CoupleMon/HatchPetContract.swift Sources/CoupleMon/HatchPetPackage.swift Checks/main.swift -o .build/message-check
 .build/message-check
+```
+
+실제 Realtime SDK로 두 클라이언트의 양방향 메시지·손그림·수신 확인·방 분리·연결 끊김 복구를 로컬 서버에서 검사할 수도 있습니다. Supabase 접속이나 저장된 연결 설정은 사용하지 않습니다.
+
+```bash
+python3 Checks/check-realtime.py
 ```
 
 ## 앱 번들 생성
@@ -90,6 +113,6 @@ open dist/CoupleMon.app
 ## 다음 단계
 
 1. 커플 초대 코드와 기기 등록
-2. 잠자기/오프라인 복구
+2. 오프라인 메시지 보관·재전송
 3. 로그인 시 자동 실행
 4. Developer ID 배포 자동화

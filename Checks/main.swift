@@ -5,6 +5,31 @@ assert(MessageText.normalize("   \n").isEmpty)
 assert(MessageText.normalize(String(repeating: "a", count: 121)).count == 120)
 assert(MessageText.normalize("  보고 싶어 🥰  ") == "보고 싶어 🥰")
 
+let drawingStroke = DrawingMessage.Stroke(
+    color: .pink, width: 4,
+    points: [.init(x: 0.1, y: 0.2), .init(x: 0.8, y: 0.9)]
+)
+let drawing = DrawingMessage(strokes: [drawingStroke])
+assert(drawing.isValid)
+let decodedDrawing = try JSONDecoder().decode(DrawingMessage.self, from: JSONEncoder().encode(drawing))
+assert(decodedDrawing == drawing)
+assert(!DrawingMessage(strokes: []).isValid)
+assert(!DrawingMessage(strokes: Array(repeating: drawingStroke, count: 81)).isValid)
+let oversizedDrawing = DrawingMessage(strokes: [.init(
+    color: .black, width: 1,
+    points: Array(repeating: .init(x: 0, y: 0), count: DrawingMessage.maxPoints + 1)
+)])
+assert(!oversizedDrawing.isValid)
+let maximumDrawing = DrawingMessage(strokes: [.init(
+    color: .purple, width: 16,
+    points: Array(repeating: .init(x: 0.999, y: 0.999), count: DrawingMessage.maxPoints)
+)])
+assert(maximumDrawing.isValid)
+let invalidDrawing = try JSONDecoder().decode(DrawingMessage.self, from: Data(
+    #"{"strokes":[{"color":"pink","width":4,"points":[{"x":2,"y":0}]}]}"#.utf8
+))
+assert(!invalidDrawing.isValid)
+
 let realtimeSettings = try RealtimeSettings(
     projectURL: " https://example.supabase.co ",
     publishableKey: " sb_publishable_example ",
@@ -61,7 +86,8 @@ do {
 
 if let petDirectory = CommandLine.arguments.dropFirst().first {
     let pet = try HatchPetPackage.load(from: URL(fileURLWithPath: petDirectory))
-    assert(pet.idleFrames.count == 6)
-    assert(pet.idleFrames.allSatisfy { $0.size.width == 192 && $0.size.height == 208 })
+    let idleFrames = pet.animations[.idle] ?? []
+    assert(idleFrames.count == 6)
+    assert(idleFrames.allSatisfy { $0.size.width == 192 && $0.size.height == 208 })
 }
 print("CoupleMon self-check passed")

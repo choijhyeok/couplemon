@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var todoRoomCode: String?
     private var todoSyncTask: Task<Void, Never>?
     private var todoSyncRequested = false
+    private var wakeObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installEditMenu()
@@ -29,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.onDecreaseCharacterSize = { [weak self] in self?.model.resizeCharacter(by: -0.1) }
         menuBarController.onResetCharacterSize = { [weak self] in self?.model.resetCharacterSize() }
         menuBarController.onConfigureRealtime = { [weak self] in self?.configureRealtime() }
+        menuBarController.onReconnect = { [weak self] in
+            Task { await self?.realtime.reconnect() }
+        }
+        menuBarController.onConnectionHelp = { [weak self] in self?.showConnectionHelp() }
         menuBarController.onCopyRoomCode = { [weak self] in self?.copyRoomCode() }
         menuBarController.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
         menuBarController.onToggleTodoList = { [weak self] in self?.toggleTodoList() }
@@ -46,6 +51,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBarController.setTodoEnabled(model.isTodoEnabled)
 
         model.onSend = { [weak self] message in self?.realtime.send(message) }
+        model.onSendDrawing = { [weak self] drawing in self?.realtime.sendDrawing(drawing) }
         model.onCharacterScaleChange = { [weak self] scale in
             self?.menuBarController.setCharacterScale(scale)
         }
@@ -56,10 +62,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.requestTodoSync()
         }
         realtime.onMessage = { [weak self] message in self?.model.receive(message) }
+        realtime.onDrawing = { [weak self] drawing in self?.model.receiveDrawing(drawing) }
+        realtime.onPartnerChange = { [weak self] reachable in
+            self?.model.isPartnerReachable = reachable
+            self?.menuBarController.setPartnerReachable(reachable)
+        }
+        realtime.onSendError = { [weak self] error in
+            self?.model.sendError = error
+            if error != nil { self?.model.showBubble() }
+        }
         realtime.onTodoChanged = { [weak self] in
             self?.requestTodoSync()
         }
         realtime.onStateChange = { [weak self] state in
+            self?.model.realtimeState = state
             self?.menuBarController.setRealtimeState(state)
             if state == .connected { self?.requestTodoSync() }
         }
@@ -72,10 +88,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             connectRealtime(using: settings)
         }
         installHotKeys()
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in await self?.realtime.reconnect() }
+        }
         overlayController.show()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         if let chatHotKey { UnregisterEventHotKey(chatHotKey) }
         if let todoHotKey { UnregisterEventHotKey(todoHotKey) }
         if let hotKeyHandler { RemoveEventHandler(hotKeyHandler) }
@@ -195,6 +217,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             await realtime.connect(to: settings)
             requestTodoSync()
+        }
+    }
+
+    private func showConnectionHelp() {
+        let alert = NSAlert()
+        alert.messageText = "연결 상태와 해결 방법"
+        let reason: String
+        if case let .failed(message) = realtime.state {
+            reason = "최근 오류: \(message)\n\n"
+        } else {
+            reason = "\(realtime.state.menuTitle)\n\n"
+        }
+        alert.informativeText = reason + "1. 두 Mac에서 CoupleMon을 최신 버전으로 실행하세요.\n2. 양쪽의 Project URL, Client key, 연결 코드가 같은지 확인하세요.\n3. Supabase 대시보드에서 프로젝트가 Paused 상태면 Restore를 실행하세요.\n4. 복구 후 양쪽에서 ‘지금 다시 연결’을 누르세요.\n\n서버 연결만으로 상대 접속이나 수신이 보장되지는 않습니다. 상대 응답과 메시지 수신을 별도로 확인하며, 오프라인 메시지는 저장되지 않습니다."
+        alert.addButton(withTitle: "확인")
+        alert.addButton(withTitle: "Supabase 대시보드 열기")
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSWorkspace.shared.open(URL(string: "https://supabase.com/dashboard")!)
         }
     }
 

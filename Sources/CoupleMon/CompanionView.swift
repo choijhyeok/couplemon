@@ -8,6 +8,9 @@ struct CompanionView: View {
     @State private var todoDraft = ""
     @State private var selectedTodoList = AppModel.TodoListKind.mine
     @State private var isEmoticonPickerPresented = false
+    @State private var isDrawingPresented = false
+    @State private var drawingToPreview: DrawingMessage?
+    @State private var isDrawingPreviewPresented = false
     @FocusState private var draftIsFocused: Bool
 
     private let basicEmoji = ["😀", "🥰", "😍", "😘", "😂", "😭", "👍", "❤️", "💛", "✨", "🎉", "🔥"]
@@ -25,6 +28,13 @@ struct CompanionView: View {
         .frame(width: model.isTodoVisible ? 600 : 320, height: 410, alignment: .trailing)
         .animation(.easeOut(duration: 0.2), value: model.isTodoVisible)
         .onChange(of: model.chatFocusRequest) { _, _ in draftIsFocused = true }
+        .popover(isPresented: $isDrawingPreviewPresented) {
+            if let drawingToPreview {
+                DrawingPreview(drawing: drawingToPreview)
+                    .frame(width: 280, height: 200)
+                    .padding(12)
+            }
+        }
     }
 
     private var companion: some View {
@@ -39,7 +49,7 @@ struct CompanionView: View {
         .animation(.easeOut(duration: 0.2), value: model.isBubbleVisible)
         .onAppear { model.showBubble() }
         .onChange(of: draftIsFocused) { _, isFocused in
-            model.setMessageEditing(isFocused)
+            model.setMessageEditing(isFocused || isDrawingPresented || isDrawingPreviewPresented)
         }
     }
 
@@ -143,7 +153,7 @@ struct CompanionView: View {
     private var speechBubble: some View {
         VStack(spacing: 9) {
             if !model.isEditingMessage, !model.displayedMessage.isEmpty {
-                messageContent(model.displayedMessage, emoticonSize: 84)
+                messageContent(model.displayedMessage, drawing: model.displayedDrawing, emoticonSize: 84)
                     .frame(maxWidth: .infinity)
             } else {
                 ScrollViewReader { proxy in
@@ -155,7 +165,7 @@ struct CompanionView: View {
                                     Text(message.isLocal ? "나" : "상대")
                                         .font(.system(size: 10, weight: .bold, design: .rounded))
                                         .foregroundStyle(message.isLocal ? Color.accentColor : Color.secondary)
-                                    messageContent(message.text, emoticonSize: 54)
+                                    messageContent(message.text, drawing: message.drawing, emoticonSize: 54)
                                     if !message.isLocal { Spacer(minLength: 18) }
                                 }
                                 .padding(.horizontal, 8)
@@ -188,6 +198,20 @@ struct CompanionView: View {
                     emoticonPicker
                 }
 
+                Button { isDrawingPresented.toggle() } label: {
+                    Image(systemName: "pencil.tip.crop.circle")
+                        .font(.system(size: 17))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("그림 그려 보내기")
+                .popover(isPresented: $isDrawingPresented, arrowEdge: .bottom) {
+                    DrawingComposerView { drawing in
+                        model.sendDrawing(drawing)
+                        isDrawingPresented = false
+                        restoreDraftFocus()
+                    }
+                }
+
                 TextField("한마디 보내기", text: $draft)
                     .textFieldStyle(.plain)
                     .focused($draftIsFocused)
@@ -204,6 +228,19 @@ struct CompanionView: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 8)
             .background(.black.opacity(0.06), in: Capsule())
+
+            if let notice = model.connectionNotice {
+                Text(notice)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onChange(of: isDrawingPresented) { _, isPresented in
+            model.setMessageEditing(isPresented || draftIsFocused || isDrawingPreviewPresented)
+        }
+        .onChange(of: isDrawingPreviewPresented) { _, isPresented in
+            model.setMessageEditing(isPresented || draftIsFocused || isDrawingPresented)
         }
         .padding(14)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
@@ -383,8 +420,18 @@ struct CompanionView: View {
     }
 
     @ViewBuilder
-    private func messageContent(_ text: String, emoticonSize: CGFloat) -> some View {
-        if let emoticon = CoupleMonAnimatedEmoticon(messageValue: text) {
+    private func messageContent(_ text: String, drawing: DrawingMessage? = nil, emoticonSize: CGFloat) -> some View {
+        if let drawing {
+            Button {
+                drawingToPreview = drawing
+                isDrawingPreviewPresented = true
+            } label: {
+                DrawingPreview(drawing: drawing)
+                    .frame(width: emoticonSize * 1.4, height: emoticonSize)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("손그림 크게 보기")
+        } else if let emoticon = CoupleMonAnimatedEmoticon(messageValue: text) {
             AnimatedEmoticonView(emoticon: emoticon, size: emoticonSize)
         } else if let emoticon = CoupleMonEmoticon(messageValue: text) {
             emoticonImage(emoticon, size: emoticonSize)
