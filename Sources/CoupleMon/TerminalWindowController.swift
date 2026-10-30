@@ -40,6 +40,7 @@ final class TerminalWindowController: NSObject, NSWindowDelegate {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         hide()
+        model.setTerminalMode(false)
         return false
     }
 }

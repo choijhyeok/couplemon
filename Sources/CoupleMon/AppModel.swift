@@ -122,6 +122,7 @@ final class AppModel: ObservableObject {
     @Published var sendError: String?
     @Published private(set) var characterImage: NSImage?
     @Published private(set) var hatchPet: HatchPet?
+    @Published private(set) var petActivity: PetActivity?
     @Published private(set) var characterScale: CGFloat
     @Published private(set) var isBubbleVisible = true
     @Published private(set) var todoItems: [TodoItem]
@@ -216,6 +217,7 @@ final class AppModel: ObservableObject {
         guard isTerminalMode != enabled else { return }
         isTerminalMode = enabled
         if enabled {
+            petActivity = nil
             letterDismissTask?.cancel()
             letterDismissTask = nil
             pendingDrawingLetters.removeAll()
@@ -305,6 +307,7 @@ final class AppModel: ObservableObject {
         drawingLetter = nil
         isDrawingLetterOpen = false
         isBubbleVisible = false
+        petActivity = nil
         bubbleDismissTask?.cancel()
     }
 
@@ -480,6 +483,9 @@ final class AppModel: ObservableObject {
         messageHistory = Array(messageHistory.suffix(5))
         terminalHistory.append(entry)
         terminalHistory = Array(terminalHistory.suffix(200))
+        if !isTerminalMode {
+            petActivity = PetActivity(kind: drawing == nil ? .chat : (isLocal ? .sendingLetter : .receivingLetter))
+        }
         showBubble()
     }
 
@@ -531,9 +537,12 @@ final class AppModel: ObservableObject {
         }
         characterImage = NSImage(data: pngData)
         hatchPet = nil
+        petActivity = nil
     }
 
     func selectHatchPet(from sourceDirectory: URL) throws {
+        let accessed = sourceDirectory.startAccessingSecurityScopedResource()
+        defer { if accessed { sourceDirectory.stopAccessingSecurityScopedResource() } }
         let sourcePet = try HatchPetPackage.load(from: sourceDirectory)
         let parentDirectory = petDirectory.deletingLastPathComponent()
         let stagingDirectory = parentDirectory.appendingPathComponent(".pet-\(UUID().uuidString)")
@@ -568,6 +577,7 @@ final class AppModel: ObservableObject {
 
         hatchPet = installedPet
         characterImage = nil
+        petActivity = nil
         try? fileManager.removeItem(at: characterURL)
     }
 
@@ -581,6 +591,7 @@ final class AppModel: ObservableObject {
         }
         characterImage = nil
         hatchPet = bundledPetDirectory.flatMap { try? HatchPetPackage.load(from: $0) }
+        petActivity = nil
     }
 
     private static var defaultCharacterURL: URL {

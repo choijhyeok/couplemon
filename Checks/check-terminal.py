@@ -11,4 +11,5 @@ objects = [p for p in (build / "CoupleMon.product/Objects.LinkFileList").read_te
 executable = root / ".build/terminal-window-check"
 subprocess.run(["swiftc", "-parse-as-library", "-I", str(build), str(root / "Checks/TerminalWindowCheck.swift"),
                 *objects, "-o", str(executable)], cwd=root, check=True)
-subprocess.run([str(executable), str(root / "dist/terminal-review")], cwd=root, check=True, timeout=30)
+subprocess.run([str(executable), str(root / "dist/terminal-review"), str(root / "Resources/DefaultPet")],
+               cwd=root, check=True, timeout=30)

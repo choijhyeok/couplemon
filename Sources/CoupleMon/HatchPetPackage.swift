@@ -9,6 +9,8 @@ struct HatchPet {
 
 enum HatchPetPackage {
     static func load(from directory: URL) throws -> HatchPet {
+        let accessed = directory.startAccessingSecurityScopedResource()
+        defer { if accessed { directory.stopAccessingSecurityScopedResource() } }
         let manifestURL = directory.appendingPathComponent("pet.json")
         let manifest: HatchPetManifest
 
@@ -27,11 +29,14 @@ enum HatchPetPackage {
         let atlasValues = try? atlasURL.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
         let resolvedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
         let resolvedAtlasURL = atlasURL.resolvingSymlinksInPath().standardizedFileURL
+        // Own the bytes before decoding: the chosen folder's access scope can end,
+        // and the staging directory is moved after a successful import.
         guard
             atlasValues?.isRegularFile == true,
             atlasValues?.isSymbolicLink != true,
             resolvedAtlasURL.deletingLastPathComponent() == resolvedDirectory,
-            let source = CGImageSourceCreateWithURL(resolvedAtlasURL as CFURL, nil),
+            let atlasData = try? Data(contentsOf: resolvedAtlasURL),
+            let source = CGImageSourceCreateWithData(atlasData as CFData, nil),
             let sourceType = CGImageSourceGetType(source) as String?,
             let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
             let width = properties[kCGImagePropertyPixelWidth] as? Int,
@@ -46,7 +51,9 @@ enum HatchPetPackage {
         guard sourceType == expectedType else { throw HatchPetError.unreadableAtlas }
 
         try HatchPetContract.validate(manifest, atlasWidth: width, atlasHeight: height)
-        guard let atlas = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+        guard let atlas = CGImageSourceCreateImageAtIndex(
+            source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+        ) else {
             throw HatchPetError.unreadableAtlas
         }
 

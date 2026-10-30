@@ -9,6 +9,14 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
     private var model: AppModel!
     private var screenshots: URL { URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true) }
 
+    private func makeModel(defaults: UserDefaults) -> AppModel {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(suiteName)
+        return AppModel(characterURL: root.appendingPathComponent("character.png"),
+                        petDirectory: root.appendingPathComponent("pet", isDirectory: true),
+                        bundledPetDirectory: URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true),
+                        defaults: defaults)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             do {
@@ -29,7 +37,7 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
     private func runChecks() async throws {
         let defaults = UserDefaults(suiteName: suiteName)!
         try checkModel(defaults: defaults)
-        model = AppModel(defaults: defaults)
+        model = makeModel(defaults: defaults)
         model.realtimeState = .connected
         model.isPartnerReachable = true
         controller = OverlayPanelController(model: model)
@@ -83,12 +91,15 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
         try capture(visiblePopup(excluding: terminal.window)!, name: "terminal-drawing-preview.png")
         terminal.window.performClose(nil)
         try await Task.sleep(for: .milliseconds(250))
-        guard model.isTerminalMode, !terminal.window.isVisible, !controller.panel.isVisible else {
-            throw Failure.failed("Closing the window revealed the pet")
+        guard !model.isTerminalMode, !terminal.window.isVisible, controller.panel.isVisible else {
+            throw Failure.failed("Red close button did not return to CoupleMon")
         }
-        guard !NSApp.windows.contains(where: { $0.isVisible && $0.frame.width > 250 && $0.frame.height > 200 }) else {
+        guard !NSApp.windows.contains(where: {
+            $0.isVisible && $0 !== controller.panel && $0.frame.width > 250 && $0.frame.height > 200
+        }) else {
             throw Failure.failed("Closing the terminal left an attachment popup visible")
         }
+        model.setTerminalMode(true)
         model.receiveDrawing(drawing)
         controller.focusChatInput()
         model.requestChatFocus()
@@ -110,7 +121,7 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
     }
 
     private func checkModel(defaults: UserDefaults) throws {
-        let probe = AppModel(defaults: defaults)
+        let probe = makeModel(defaults: defaults)
         let image = DrawingMessage(strokes: [.init(color: .blue, width: 4, points: [.init(x: 0.5, y: 0.5)])])
         probe.receiveDrawing(image)
         probe.messageDraft = "  draft across modes  "

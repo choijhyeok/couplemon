@@ -306,7 +306,7 @@ struct CompanionView: View {
             AnimatedHatchPetView(
                 pet: pet,
                 size: 150 * model.characterScale,
-                messageID: model.messageHistory.last?.id
+                activity: model.petActivity
             )
                 .id(pet.manifest.id)
         } else if let image = model.characterImage {
@@ -326,6 +326,7 @@ struct CompanionView: View {
 
     private var resizableCharacter: some View {
         character
+            .modifier(PetLetterEffect(activity: model.petActivity, size: 150 * model.characterScale))
             .contentShape(Rectangle())
             .onTapGesture { model.showBubble() }
             .accessibilityAction { model.showBubble() }
@@ -575,7 +576,7 @@ private struct AnimatedEmoticonView: View {
 private struct AnimatedHatchPetView: View {
     let pet: HatchPet
     let size: CGFloat
-    let messageID: UUID?
+    let activity: PetActivity?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var startedAt = Date()
@@ -599,20 +600,28 @@ private struct AnimatedHatchPetView: View {
                 .scaledToFit()
                 .frame(width: size, height: size)
         }
-        .task(id: messageID) {
-            guard messageID != nil, !reduceMotion else { return }
-            let animations = HatchPetContract.chatAnimationChoices(
-                available: Set(pet.animations.keys),
-                excluding: lastAnimation
-            )
-            guard let animation = animations.randomElement() else { return }
+        .task(id: activity?.id) {
+            activeAnimation = nil
+            startedAt = Date()
+            guard let activity, !reduceMotion else { return }
+            let animation: HatchPetContract.Animation
+            if let preferred = activity.kind.preferredAnimation {
+                animation = pet.animations[preferred] != nil ? preferred : .idle
+            } else {
+                let animations = HatchPetContract.chatAnimationChoices(
+                    available: Set(pet.animations.keys), excluding: lastAnimation
+                )
+                guard let selected = animations.randomElement() else { return }
+                animation = selected
+            }
 
             lastAnimation = animation
             activeAnimation = animation
             startedAt = Date()
             do {
                 try await Task.sleep(
-                    nanoseconds: UInt64(animation.duration * 1_000_000_000)
+                    nanoseconds: UInt64((activity.kind.letterDirection == nil
+                        ? animation.duration : PetLetterAnimation.duration) * 1_000_000_000)
                 )
             } catch {
                 return

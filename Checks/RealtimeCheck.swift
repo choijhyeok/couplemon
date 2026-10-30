@@ -76,6 +76,8 @@ struct RealtimeCheck {
         }
         guard let sentLetter = senderModel.drawingLetter, let receivedLetter = receiverModel.drawingLetter,
               sentLetter.isLocal, !receivedLetter.isLocal,
+              senderModel.petActivity?.kind == .sendingLetter,
+              receiverModel.petActivity?.kind == .receivingLetter,
               !senderModel.isBubbleVisible, !receiverModel.isBubbleVisible else {
             throw CheckError.failed("Both peers must present letters before the chat bubble")
         }
@@ -152,6 +154,7 @@ struct RealtimeCheck {
                 && receiverModel.terminalHistory.last?.id != previousImageID
         }
         guard senderModel.drawingLetter == nil, receiverModel.drawingLetter == nil,
+              senderModel.petActivity == nil, receiverModel.petActivity == nil,
               !senderModel.isBubbleVisible, !receiverModel.isBubbleVisible,
               receiverModel.terminalHistory.last?.attachmentNumber != nil,
               senderModel.messageDraft.isEmpty else {
@@ -175,7 +178,9 @@ struct RealtimeCheck {
         model.receiveDrawing(drawing)
         guard model.messageHistory.last?.isLocal == false else { throw CheckError.failed("Received drawing history") }
         model.receive("좋아")
-        guard model.displayedDrawing == nil else { throw CheckError.failed("Text must replace drawing") }
+        guard model.displayedDrawing == nil, model.petActivity?.kind == .chat else {
+            throw CheckError.failed("Text must replace drawing without a letter gesture")
+        }
         model.realtimeState = .connected
         guard model.connectionNotice != nil else { throw CheckError.failed("Server-only warning") }
         model.isPartnerReachable = true
