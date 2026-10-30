@@ -34,7 +34,9 @@ enum HatchPetPackage {
         guard
             atlasValues?.isRegularFile == true,
             atlasValues?.isSymbolicLink != true,
-            resolvedAtlasURL.deletingLastPathComponent() == resolvedDirectory,
+            // NSOpenPanel folder URLs may omit the trailing slash. Compare directory
+            // identity by normalized components, not the URL's directory hint.
+            resolvedAtlasURL.deletingLastPathComponent().pathComponents == resolvedDirectory.pathComponents,
             let atlasData = try? Data(contentsOf: resolvedAtlasURL),
             let source = CGImageSourceCreateWithData(atlasData as CFData, nil),
             let sourceType = CGImageSourceGetType(source) as String?,

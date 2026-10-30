@@ -40,14 +40,16 @@ final class PetInteractionCheck: NSObject, NSApplicationDelegate {
         let sources = [bundled] + arguments.dropFirst(3).map { URL(fileURLWithPath: $0, isDirectory: true) }
         for directory in sources {
             let expected = try HatchPetPackage.load(from: directory).manifest.id
-            try model.selectHatchPet(from: directory)
-            let restored = AppModel(characterURL: root.appendingPathComponent("character.png"), petDirectory: destination,
-                                    bundledPetDirectory: nil, defaults: defaults)
-            guard restored.hatchPet?.manifest.id == expected,
-                  restored.hatchPet?.animations[.idle]?.first?.tiffRepresentation != nil else {
-                throw Failure.failed("Could not restore \(directory.lastPathComponent)")
+            for variant in [directory, URL(fileURLWithPath: directory.path, isDirectory: false)] {
+                try model.selectHatchPet(from: variant)
+                let restored = AppModel(characterURL: root.appendingPathComponent("character.png"), petDirectory: destination,
+                                        bundledPetDirectory: nil, defaults: defaults)
+                guard restored.hatchPet?.manifest.id == expected,
+                      restored.hatchPet?.animations[.idle]?.first?.tiffRepresentation != nil else {
+                    throw Failure.failed("Could not restore \(directory.lastPathComponent)")
+                }
+                print("PASS: selected and restored", expected, "directory hint:", variant.hasDirectoryPath)
             }
-            print("PASS: selected and restored", expected)
         }
         try model.selectHatchPet(from: destination)
         guard model.hatchPet?.animations[.idle]?.first?.tiffRepresentation != nil else {

@@ -37,4 +37,29 @@ final class HatchPetPackageTests: XCTestCase {
         XCTAssertEqual(pet.animations[.idle]?.count, 6)
         XCTAssertNotNil(pet.animations[.idle]?.first?.tiffRepresentation)
     }
+
+    @MainActor
+    func testFolderURLWithoutTrailingSlashLoadsAndImportsLikeDirectoryURL() throws {
+        // NSOpenPanel can return a folder URL without a trailing directory separator.
+        let withSlash = URL(fileURLWithPath: bundledDirectory.path, isDirectory: true)
+        let withoutSlash = URL(fileURLWithPath: bundledDirectory.path, isDirectory: false)
+        XCTAssertNotEqual(withSlash, withoutSlash)
+        XCTAssertEqual(withSlash.pathComponents, withoutSlash.pathComponents)
+        let expected = try HatchPetPackage.load(from: withSlash)
+        let actual = try HatchPetPackage.load(from: withoutSlash)
+        XCTAssertEqual(actual.manifest, expected.manifest)
+        XCTAssertEqual(Set(actual.animations.keys), Set(expected.animations.keys))
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let name = "HatchPetPackageTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { try? FileManager.default.removeItem(at: root); defaults.removePersistentDomain(forName: name) }
+        let destination = root.appendingPathComponent("pet", isDirectory: true)
+        let model = AppModel(characterURL: root.appendingPathComponent("character.png"), petDirectory: destination,
+                             bundledPetDirectory: nil, defaults: defaults)
+        try model.selectHatchPet(from: withoutSlash)
+        let restored = try HatchPetPackage.load(from: destination)
+        XCTAssertEqual(restored.manifest, expected.manifest)
+        XCTAssertNotNil(restored.animations[.idle]?.first?.tiffRepresentation)
+    }
 }
