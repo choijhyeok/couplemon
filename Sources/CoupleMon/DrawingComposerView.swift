@@ -102,6 +102,7 @@ struct DrawingComposerView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!drawing.isValid || currentStroke != nil)
             }
+            DrawingShareActions(drawing: drawing, isEnabled: currentStroke == nil)
             if drawing.pointCount >= DrawingMessage.maxPoints || strokes.count >= DrawingMessage.maxStrokes {
                 Text("그림이 가득 찼어요. 보내거나 일부를 되돌려 주세요.")
                     .font(.caption).foregroundStyle(.secondary)

@@ -36,6 +36,7 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
 
     private func runChecks() async throws {
         let defaults = UserDefaults(suiteName: suiteName)!
+        try checkDrawingExport()
         try checkModel(defaults: defaults)
         model = makeModel(defaults: defaults)
         model.realtimeState = .connected
@@ -83,12 +84,22 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
         click(terminal.window, x: imagePoint.x, y: imagePoint.y)
         try await waitFor("Click did not open the image preview") { self.visiblePopup(excluding: terminal.window) != nil }
         let preview = visiblePopup(excluding: terminal.window)!
+        guard shareButton(in: preview.contentView!)?.isEnabled == true else {
+            throw Failure.failed("Drawing preview has no enabled share button")
+        }
         try capture(preview, name: "terminal-image-preview.png")
         click(preview, x: preview.contentView!.bounds.width - 22, y: preview.contentView!.bounds.height - 24)
         try await waitFor("Image close button failed") { !preview.isVisible }
         click(terminal.window, x: terminal.window.contentView!.bounds.width - 84, y: 86)
         try await waitFor("Drawing composer did not open") { self.visiblePopup(excluding: terminal.window) != nil }
-        try capture(visiblePopup(excluding: terminal.window)!, name: "terminal-drawing-preview.png")
+        let composer = visiblePopup(excluding: terminal.window)!
+        try await waitFor("Drawing composer share control did not load") {
+            self.shareButton(in: composer.contentView!) != nil
+        }
+        try capture(composer, name: "terminal-drawing-preview.png")
+        guard shareButton(in: composer.contentView!)?.isEnabled == false else {
+            throw Failure.failed("Empty drawing must not be shareable")
+        }
         terminal.window.performClose(nil)
         try await Task.sleep(for: .milliseconds(250))
         guard !model.isTerminalMode, !terminal.window.isVisible, controller.panel.isVisible else {
@@ -118,6 +129,55 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
         try await Task.sleep(for: .milliseconds(250))
         guard !terminal.window.isVisible, controller.panel.isVisible,
               model.drawingLetter == nil else { throw Failure.failed("Explicit return failed") }
+    }
+
+    private func shareButton(in view: NSView) -> NSButton? {
+        if let button = view as? NSButton, button.title == "카카오톡 공유" { return button }
+        return view.subviews.lazy.compactMap { self.shareButton(in: $0) }.first
+    }
+
+    private func checkDrawingExport() throws {
+        let drawing = DrawingMessage(strokes: [
+            .init(color: .black, width: 16, points: [.init(x: 0.1, y: 0.25), .init(x: 0.9, y: 0.25)]),
+            .init(color: .white, width: 16, points: [.init(x: 0.5, y: 0.25), .init(x: 0.7, y: 0.25)]),
+            .init(color: .red, width: 16, points: [.init(x: 0.25, y: 0.75)]),
+        ])
+        let data = try DrawingImageExporter.pngData(for: drawing)
+        guard let bitmap = NSBitmapImageRep(data: data), bitmap.pixelsWide == 840, bitmap.pixelsHigh == 600 else {
+            throw Failure.failed("Export must be a decodable 840×600 PNG")
+        }
+        func color(_ x: Int, _ y: Int) throws -> NSColor {
+            guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                  color.alphaComponent > 0.99 else { throw Failure.failed("Export must be opaque") }
+            return color
+        }
+        let black = try color(210, 150), white = try color(504, 150)
+        let red = try color(210, 450), corner = try color(0, 0)
+        guard black.redComponent < 0.05, black.greenComponent < 0.05, black.blueComponent < 0.05,
+              white.redComponent > 0.99, white.greenComponent > 0.99, white.blueComponent > 0.99,
+              red.redComponent > 0.8, red.greenComponent < 0.5, red.blueComponent < 0.5,
+              corner.redComponent > 0.99, corner.greenComponent > 0.99, corner.blueComponent > 0.99 else {
+            throw Failure.failed("Export lost stroke position, dot, white eraser or background")
+        }
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("keep existing clipboard", forType: .string)
+        do {
+            try DrawingImageExporter.copy(DrawingMessage(strokes: []), to: pasteboard)
+            throw Failure.failed("Empty drawing was copied")
+        } catch DrawingImageExporter.ExportError.invalidDrawing {
+            guard pasteboard.string(forType: .string) == "keep existing clipboard" else {
+                throw Failure.failed("Invalid drawing cleared clipboard")
+            }
+        }
+        try DrawingImageExporter.copy(drawing, to: pasteboard)
+        guard let png = pasteboard.data(forType: .png), NSBitmapImageRep(data: png)?.pixelsWide == 840,
+              let tiff = pasteboard.data(forType: .tiff), NSImage(data: tiff) != nil else {
+            throw Failure.failed("Clipboard must offer PNG and TIFF image representations")
+        }
+        try FileManager.default.createDirectory(at: screenshots, withIntermediateDirectories: true)
+        try data.write(to: screenshots.appendingPathComponent("shared-drawing.png"))
+        print("PASS: PNG size, stroke orientation, dot, white eraser, opaque background, clipboard representations, invalid export")
     }
 
     private func checkModel(defaults: UserDefaults) throws {

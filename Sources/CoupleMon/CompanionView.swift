@@ -43,9 +43,13 @@ struct CompanionView: View {
         }
         .popover(isPresented: $isDrawingPreviewPresented) {
             if let drawingToPreview {
-                DrawingPreview(drawing: drawingToPreview)
-                    .frame(width: 280, height: 200)
-                    .padding(12)
+                VStack(spacing: 12) {
+                    DrawingPreview(drawing: drawingToPreview)
+                        .frame(width: 280, height: 200)
+                    DrawingShareActions(drawing: drawingToPreview)
+                }
+                .padding(12)
+                .frame(width: 304)
             }
         }
     }

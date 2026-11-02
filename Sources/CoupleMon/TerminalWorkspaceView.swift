@@ -277,6 +277,8 @@ struct TerminalWorkspaceView: View {
             if let drawing = message.drawing {
                 DrawingPreview(drawing: drawing)
                     .frame(width: 420, height: 300)
+                DrawingShareActions(drawing: drawing)
+                    .frame(width: 420)
             } else if let image = CoupleMonAnimatedEmoticon(messageValue: message.text)?.emoticon.image
                         ?? CoupleMonEmoticon(messageValue: message.text)?.image {
                 Image(nsImage: image)
