@@ -73,10 +73,16 @@ for obj in root.children_recursive:
     if obj.type not in {"CAMERA", "LIGHT"}:
         obj.select_set(True)
 bpy.context.view_layer.objects.active = root
+# Blender 4.2 merges by NLA track name; newer exporters default to action names,
+# which splits each behavior into separate root/head/limb clips.
+animation_options = {}
+if "export_merge_animation" in bpy.ops.export_scene.gltf.get_rna_type().properties:
+    animation_options["export_merge_animation"] = "NLA_TRACK"
 bpy.ops.export_scene.gltf(
     filepath=os.path.join(workspace, "model.glb"), export_format="GLB",
     use_selection=True, export_animations=True, export_yup=True, export_animation_mode="ACTIONS",
     export_draco_mesh_compression_enable=False,
+    **animation_options,
 )
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(workspace, "source.blend"))
 # Review image never enters the exported character model.
