@@ -73,6 +73,7 @@ final class PetInteractionCheck: NSObject, NSApplicationDelegate {
         controller.show()
         model.clearMessage()
         try await Task.sleep(for: .milliseconds(300))
+        try await checkTodoPopover()
         let drawing = DrawingMessage(strokes: [.init(color: .blue, width: 4, points: [.init(x: 0.5, y: 0.5)])])
         model.sendDrawing(drawing)
         guard model.petActivity?.kind == .sendingLetter else { throw Failure.failed("Missing sending action") }
@@ -100,6 +101,49 @@ final class PetInteractionCheck: NSObject, NSApplicationDelegate {
             throw Failure.failed("Terminal mode exposed letter actions")
         }
         model.setTerminalMode(false)
+    }
+
+    private func checkTodoPopover() async throws {
+        let frame = controller.panel.frame
+        let existing = Set(NSApp.windows.filter(\.isVisible).map(ObjectIdentifier.init))
+        model.setTodoEnabled(true)
+        try await Task.sleep(for: .milliseconds(100))
+        // The 2D toolbar has Todo and resize controls, centered below the pet.
+        func clickTodo() {
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: 143, y: 30), modifierFlags: [],
+                                              timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: controller.panel.windowNumber,
+                                              context: nil, eventNumber: 1, clickCount: 1, pressure: 1)!
+                controller.panel.sendEvent(event)
+            }
+        }
+        clickTodo()
+        try await Task.sleep(for: .milliseconds(400))
+        guard model.isTodoVisible, controller.panel.frame == frame,
+              let popup = NSApp.windows.first(where: { $0.isVisible && !existing.contains(ObjectIdentifier($0)) }),
+              popup.frame.width < 290, popup.frame.height < 380 else {
+            throw Failure.failed("Todo did not open as a compact popover without moving the pet")
+        }
+        clickTodo()
+        try await Task.sleep(for: .milliseconds(400))
+        guard !model.isTodoVisible, !popup.isVisible, controller.panel.frame == frame else {
+            throw Failure.failed("Todo button did not close its popover")
+        }
+        // Menu/hotkey and disabling the feature use the same presentation state.
+        model.toggleTodoVisibility()
+        try await Task.sleep(for: .milliseconds(400))
+        guard model.isTodoVisible, controller.panel.frame == frame,
+              NSApp.windows.contains(where: { $0.isVisible && !existing.contains(ObjectIdentifier($0)) }) else {
+            throw Failure.failed("Programmatic Todo toggle did not reopen the popover")
+        }
+        model.setTodoEnabled(false)
+        try await Task.sleep(for: .milliseconds(400))
+        guard !model.isTodoVisible,
+              !NSApp.windows.contains(where: { $0.isVisible && !existing.contains(ObjectIdentifier($0)) }),
+              controller.panel.frame == frame else {
+            throw Failure.failed("Disabling Todo left a popover or moved the pet")
+        }
+        print("PASS: Todo button toggle, programmatic reopen, disable, fixed pet frame")
     }
 
     private func capture(_ name: String, directory: URL) throws {

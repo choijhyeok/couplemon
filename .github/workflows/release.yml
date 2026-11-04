@@ -25,12 +25,16 @@ jobs:
           COUPLEMON_VERSION="$version" COUPLEMON_BUILD="$GITHUB_RUN_NUMBER" ./Scripts/package-installer.sh
           test "$(plutil -extract CFBundleShortVersionString raw dist/CoupleMon.app/Contents/Info.plist)" = "$version"
           codesign --verify --deep --strict --verbose=2 dist/CoupleMon.app
+          for resource in viewer.html viewer.js couple-scene.js motion-player.js generation-prompt.txt build-model.py pet-actions.py vendor/three.module.min.js vendor/three.core.min.js vendor/GLTFLoader.js vendor/LICENSE; do
+            test -s "dist/CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/Pet3D/$resource"
+          done
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/MacOS/CoupleMon$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/AppIcon.icns$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/DefaultPet/pet.json$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/quokka.png$'
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/couple_bed.png$'
-          test "$(pkgutil --payload-files dist/CoupleMon.pkg | grep -c '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/.*\.png$')" = 21
+          # AppleDouble entries (._*) describe metadata, not additional images.
+          test "$(pkgutil --payload-files dist/CoupleMon.pkg | grep -c '^\./CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/[^.][^/]*\.png$')" = 21
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}

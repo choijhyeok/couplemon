@@ -3,8 +3,8 @@ set -eu
 
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
-version=${COUPLEMON_VERSION:-0.5.13}
-build=${COUPLEMON_BUILD:-25}
+version=${COUPLEMON_VERSION:-0.6.0}
+build=${COUPLEMON_BUILD:-26}
 
 swift build -c release
 binary_dir=$(swift build -c release --show-bin-path)
@@ -12,10 +12,10 @@ app_dir="$project_dir/dist/CoupleMon.app"
 
 rm -rf "$app_dir"
 mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
-cp "$binary_dir/CoupleMon" "$app_dir/Contents/MacOS/CoupleMon"
-cp -R "$project_dir/Resources/DefaultPet" "$app_dir/Contents/Resources/DefaultPet"
-cp "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
-cp -R "$binary_dir/CoupleMon_CoupleMon.bundle" "$app_dir/Contents/Resources/"
+cp -X "$binary_dir/CoupleMon" "$app_dir/Contents/MacOS/CoupleMon"
+cp -RX "$project_dir/Resources/DefaultPet" "$app_dir/Contents/Resources/DefaultPet"
+cp -X "$project_dir/Resources/AppIcon.icns" "$app_dir/Contents/Resources/AppIcon.icns"
+cp -RX "$binary_dir/CoupleMon_CoupleMon.bundle" "$app_dir/Contents/Resources/"
 
 cat > "$app_dir/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

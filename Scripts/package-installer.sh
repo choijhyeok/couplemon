@@ -10,7 +10,8 @@ trap 'rm -rf "$staging_dir"' EXIT
 "$project_dir/Scripts/package-app.sh" >/dev/null
 version=$(plutil -extract CFBundleShortVersionString raw "$app_dir/Contents/Info.plist")
 mkdir -p "$staging_dir/root"
-cp -R "$app_dir" "$staging_dir/root/CoupleMon.app"
+cp -RX "$app_dir" "$staging_dir/root/CoupleMon.app"
+codesign --verify --deep --strict "$staging_dir/root/CoupleMon.app"
 pkgbuild --analyze --root "$staging_dir/root" "$staging_dir/components.plist"
 plutil -replace 0.BundleIsRelocatable -bool NO "$staging_dir/components.plist"
 plutil -replace 0.BundleHasStrictIdentifier -bool YES "$staging_dir/components.plist"

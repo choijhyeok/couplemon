@@ -3,6 +3,8 @@ import SwiftUI
 
 struct CompanionView: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var together: CouplePetSession
+    init(model: AppModel) { self.model = model; together = model.together }
     @State private var resizeStartScale: CGFloat?
     @State private var todoDraft = ""
     @State private var selectedTodoList = AppModel.TodoListKind.mine
@@ -10,28 +12,20 @@ struct CompanionView: View {
     @State private var isDrawingPresented = false
     @State private var drawingToPreview: DrawingMessage?
     @State private var isDrawingPreviewPresented = false
+    @State private var isActionPanelPresented = false
     @FocusState private var draftIsFocused: Bool
 
     private let basicEmoji = ["😀", "🥰", "😍", "😘", "😂", "😭", "👍", "❤️", "💛", "✨", "🎉", "🔥"]
 
     var body: some View {
-        HStack(spacing: 0) {
-            if model.isTodoVisible {
-                todoList
-                    .padding(12)
-                    .frame(width: 280, height: 410)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-            }
-            companion
-        }
-        .frame(width: model.isTodoVisible ? 600 : 320, height: 410, alignment: .trailing)
-        .animation(.easeOut(duration: 0.2), value: model.isTodoVisible)
+        companion
         .onChange(of: model.isTerminalMode) { _, enabled in
             if enabled {
                 draftIsFocused = false
                 isEmoticonPickerPresented = false
                 isDrawingPresented = false
                 isDrawingPreviewPresented = false
+                isActionPanelPresented = false
             }
         }
         .onChange(of: model.chatFocusRequest) { _, _ in
@@ -40,6 +34,10 @@ struct CompanionView: View {
             } else {
                 draftIsFocused = true
             }
+        }
+        .onChange(of: model.pet3D?.id) { _, _ in isActionPanelPresented = false }
+        .onChange(of: model.isTodoVisible) { _, visible in
+            if visible { isActionPanelPresented = false }
         }
         .popover(isPresented: $isDrawingPreviewPresented) {
             if let drawingToPreview {
@@ -65,7 +63,7 @@ struct CompanionView: View {
                     DrawingLetterView(
                         letter: letter,
                         isOpen: model.isDrawingLetterOpen,
-                        height: min(216, 382 - 150 * model.characterScale),
+                        height: min(216, 310 - (model.pet3D == nil ? 150 : 170) * model.characterScale),
                         onOpen: { model.openDrawingLetter(id: letter.id) },
                         onClose: { model.dismissDrawingLetter(id: letter.id) }
                     )
@@ -74,7 +72,10 @@ struct CompanionView: View {
                 }
             }
             .frame(maxHeight: .infinity, alignment: .bottom)
-            resizableCharacter
+            VStack(spacing: 5) {
+                PetLevelBar(progress: model.petProgress)
+                resizableCharacter
+            }
         }
         .padding(12)
         .frame(width: 320, height: 410)
@@ -85,6 +86,7 @@ struct CompanionView: View {
             draftIsFocused = false
             isEmoticonPickerPresented = false
             isDrawingPreviewPresented = false
+            isActionPanelPresented = false
         }
         .onAppear { if model.drawingLetter == nil { model.showBubble() } }
         .onChange(of: draftIsFocused) { _, isFocused in
@@ -102,6 +104,11 @@ struct CompanionView: View {
                 Text("\(items.filter(\.isCompleted).count)/\(items.count)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                Button { model.dismissTodo() } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Todo List 닫기")
             }
 
             Picker("Todo 목록", selection: $selectedTodoList) {
@@ -183,10 +190,8 @@ struct CompanionView: View {
                 .background(.black.opacity(0.06), in: Capsule())
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22))
-        .overlay { RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.6), lineWidth: 1) }
-        .shadow(color: .black.opacity(0.16), radius: 12, y: 5)
+        .padding(12)
+        .frame(width: 252, height: 330)
     }
 
     private var speechBubble: some View {
@@ -306,7 +311,17 @@ struct CompanionView: View {
 
     @ViewBuilder
     private var character: some View {
-        if let pet = model.hatchPet {
+        if let url = model.pet3DModelURL {
+            Pet3DView(modelURL: url, activityID: model.petActivity?.id,
+                      action: model.petActivity?.action3D ?? .idle, event: model.petActivity?.event3D,
+                      level: model.petProgress.level, rewardLevel: model.equippedRewardLevel,
+                      randomEnabled: model.isRandom3DEnabled && !model.isTerminalMode, randomInterval: model.random3DInterval,
+                      partnerURL: together.partnerURL, performance: together.performance,
+                      onTap: { model.showBubble() })
+                .id(model.pet3D?.id)
+                .frame(width: min(296, (together.partnerURL == nil ? 170 : 296) * model.characterScale), height: 170 * model.characterScale)
+                .accessibilityLabel(model.pet3D?.name ?? "3D 캐릭터")
+        } else if let pet = model.hatchPet {
             AnimatedHatchPetView(
                 pet: pet,
                 size: 150 * model.characterScale,
@@ -329,39 +344,88 @@ struct CompanionView: View {
     }
 
     private var resizableCharacter: some View {
-        character
-            .modifier(PetLetterEffect(activity: model.petActivity, size: 150 * model.characterScale))
+        VStack(spacing: 4) {
+          character
+            .modifier(PetLetterEffect(activity: model.pet3D == nil ? model.petActivity : nil, size: 150 * model.characterScale))
             .contentShape(Rectangle())
             .onTapGesture { model.showBubble() }
             .accessibilityAction { model.showBubble() }
-            .overlay(alignment: .bottomLeading) {
+            .contextMenu {
+                if model.pet3D != nil {
+                    if let reward = model.equippedReward {
+                        Button(reward.action.title) { model.playEquippedInteraction() }
+                    }
+                    Menu("해금 아이템 장착") {
+                        if model.unlockedRewards.isEmpty { Text("LV 2부터 해금됩니다") }
+                        ForEach(model.unlockedRewards) { reward in
+                            Button(reward.title) { model.equipReward(at: reward.level) }
+                        }
+                    }
+                }
+            }
+          characterControls
+        }
+        .popover(isPresented: sidePanelPresented, attachmentAnchor: .rect(.bounds), arrowEdge: .trailing) {
+            if model.isTodoVisible {
+                todoList
+            } else if isActionPanelPresented {
+                PetActionPanel(model: model) { isActionPanelPresented = false }
+            }
+        }
+    }
+
+    private var sidePanelPresented: Binding<Bool> {
+        Binding(get: { model.isTodoVisible || isActionPanelPresented }, set: { presented in
+            if !presented {
+                model.dismissTodo()
+                isActionPanelPresented = false
+            }
+        })
+    }
+
+    private var characterControls: some View {
+        HStack(spacing: 6) {
                 if model.isTodoEnabled {
-                    Button { model.toggleTodoVisibility() } label: {
+                    Button {
+                        isActionPanelPresented = false
+                        model.toggleTodoVisibility()
+                    } label: {
                         Image(systemName: model.isTodoVisible ? "doc.text.fill" : "doc.text")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 30, height: 30)
-                            .background(model.isTodoVisible ? Color.accentColor : .black.opacity(0.62), in: Circle())
-                            .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1))
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 28)
+                            .background(model.isTodoVisible ? Color.accentColor : .clear, in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .offset(x: -7, y: 7)
                     .accessibilityLabel(model.isTodoVisible ? "Todo List 닫기" : "Todo List 열기")
                     .help(model.isTodoVisible ? "Todo List 닫기" : "Todo List 열기")
                 }
-            }
-            .overlay(alignment: .bottomTrailing) {
+                if model.pet3D != nil {
+                    Button {
+                        model.dismissTodo()
+                        isActionPanelPresented.toggle()
+                    } label: {
+                        Image(systemName: model.isRandom3DEnabled ? "shuffle" : "play.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .frame(width: 28, height: 28)
+                            .background(isActionPanelPresented ? Color.accentColor
+                                        : (model.isRandom3DEnabled ? .green.opacity(0.55) : .clear), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("캐릭터 행동 열기")
+                    .help(model.isRandom3DEnabled ? "랜덤 자동 행동 켜짐 · 행동 창 열기" : "캐릭터 행동 · 해금한 도구로 놀기")
+                }
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(.black.opacity(0.62), in: Circle())
-                    .overlay(Circle().stroke(.white.opacity(0.7), lineWidth: 1))
-                    .offset(x: 7, y: 7)
+                    .font(.system(size: 11, weight: .semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
                     .gesture(resizeGesture)
                     .accessibilityLabel("캐릭터 크기 조절")
                     .help("대각선으로 드래그해 캐릭터 크기 조절")
-            }
+        }
+        .foregroundStyle(.white)
+        .padding(4)
+        .background(.black.opacity(0.58), in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.35), lineWidth: 0.8))
     }
 
     private var resizeGesture: some Gesture {

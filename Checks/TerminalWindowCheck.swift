@@ -47,7 +47,8 @@ final class TerminalWindowCheck: NSObject, NSApplicationDelegate {
         model.setMessageEditing(true)
         try await Task.sleep(for: .milliseconds(300))
         try capture(controller.panel, name: "terminal-button-preview.png")
-        click(controller.panel, x: 96, y: 198)
+        // The level bar and separate control row sit below the chat bubble.
+        click(controller.panel, x: 105, y: 277)
         try await Task.sleep(for: .milliseconds(400))
         guard model.isTerminalMode, !controller.panel.isVisible,
               let terminal = controller.terminalController, terminal.window.isVisible else {

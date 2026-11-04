@@ -5,6 +5,7 @@ final class MenuBarController: NSObject {
     var onToggleOverlay: (() -> Void)?
     var onChooseCharacter: (() -> Void)?
     var onChooseHatchPet: (() -> Void)?
+    var onOpen3DCharacters: (() -> Void)?
     var onResetCharacter: (() -> Void)?
     var onClearMessage: (() -> Void)?
     var onToggleTodoList: (() -> Void)?
@@ -39,8 +40,13 @@ final class MenuBarController: NSObject {
         terminalModeItem = item("터미널 모드 열기", action: #selector(toggleTerminalMode))
         menu.addItem(terminalModeItem)
         menu.addItem(.separator())
-        menu.addItem(item("Codex 애니메이션 펫 선택…", action: #selector(chooseHatchPet)))
-        menu.addItem(item("일반 이미지 선택…", action: #selector(chooseCharacter)))
+        let existingCharacters = NSMenuItem(title: "기존 캐릭터 불러오기", action: nil, keyEquivalent: "")
+        let existingMenu = NSMenu(title: "기존 캐릭터 불러오기")
+        existingMenu.addItem(item("Codex 애니메이션 펫 선택…", action: #selector(chooseHatchPet)))
+        existingMenu.addItem(item("일반 이미지 선택…", action: #selector(chooseCharacter)))
+        existingCharacters.submenu = existingMenu
+        menu.addItem(existingCharacters)
+        menu.addItem(item("3D 캐릭터 만들기·불러오기…", action: #selector(open3DCharacters)))
         menu.addItem(item("기본 캐릭터로 되돌리기", action: #selector(resetCharacter)))
 
         characterSizeItem = NSMenuItem(title: "캐릭터 크기 (100%)", action: nil, keyEquivalent: "")
@@ -125,6 +131,7 @@ final class MenuBarController: NSObject {
     @objc private func toggleOverlay() { onToggleOverlay?() }
     @objc private func chooseCharacter() { onChooseCharacter?() }
     @objc private func chooseHatchPet() { onChooseHatchPet?() }
+    @objc private func open3DCharacters() { onOpen3DCharacters?() }
     @objc private func resetCharacter() { onResetCharacter?() }
     @objc private func clearMessage() { onClearMessage?() }
     @objc private func toggleTodoList() { onToggleTodoList?() }

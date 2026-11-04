@@ -28,6 +28,9 @@ final class CoupleRealtimeService {
     var onStateChange: ((CoupleRealtimeState) -> Void)?
     var onPartnerChange: ((Bool) -> Void)?
     var onSendError: ((String?) -> Void)?
+    var onPetPacket: ((CouplePetPacket) -> Void)?
+    var onPetConnection: ((Bool, String) -> Void)?
+    var onPetTick: (() -> Void)?
 
     private var client: RealtimeClientV2?
     private var channel: RealtimeChannelV2?
@@ -41,7 +44,10 @@ final class CoupleRealtimeService {
     private var lastPartnerSeen: Date?
     private let makeClient: (URL, RealtimeClientOptions) -> RealtimeClientV2
     private(set) var state: CoupleRealtimeState = .notConfigured {
-        didSet { onStateChange?(state) }
+        didSet {
+            onStateChange?(state)
+            onPetConnection?(state == .connected, (settings?.projectURL ?? "") + "#" + (settings?.normalizedRoomCode ?? ""))
+        }
     }
 
     init(makeClient: @escaping (URL, RealtimeClientOptions) -> RealtimeClientV2 = {
@@ -101,6 +107,16 @@ final class CoupleRealtimeService {
             let todos = channel.broadcastStream(event: "todo_changed")
             let peers = channel.broadcastStream(event: "peer_probe")
             let acknowledgements = channel.broadcastStream(event: "receipt")
+            let petPackets = channel.broadcastStream(event: "couple_pet_v1")
+            tasks.append(Task { [weak self] in
+                for await envelope in petPackets {
+                    guard let self, self.connectionID == id, !Task.isCancelled else { return }
+                    guard let payload = envelope["payload"], let data = try? JSONEncoder().encode(payload),
+                          data.count <= 40_000,
+                          let packet = try? JSONDecoder().decode(CouplePetPacket.self, from: data) else { continue }
+                    self.onPetPacket?(packet)
+                }
+            })
 
             tasks.append(Task { [weak self] in
                 for await envelope in messages {
@@ -217,6 +233,7 @@ final class CoupleRealtimeService {
                 while !Task.isCancelled {
                     guard let self, self.connectionID == id else { return }
                     if self.state == .connected {
+                        self.onPetTick?()
                         self.onPartnerChange?(self.lastPartnerSeen.map { Date().timeIntervalSince($0) < 35 } ?? false)
                         try? await channel.broadcast(event: "peer_probe", message: PeerProbe(
                             sender: self.senderID, reply: false
@@ -236,6 +253,11 @@ final class CoupleRealtimeService {
     func send(_ text: String) {
         let messageID = UUID()
         send(event: "message", message: BroadcastMessage(text: text, id: messageID), id: messageID)
+    }
+
+    func sendPetPacket(_ packet: CouplePetPacket) async throws {
+        guard state == .connected, let channel else { throw URLError(.notConnectedToInternet) }
+        try await channel.broadcast(event: "couple_pet_v1", message: packet)
     }
 
     func sendDrawing(_ drawing: DrawingMessage) {

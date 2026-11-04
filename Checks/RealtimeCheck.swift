@@ -36,8 +36,22 @@ struct RealtimeCheck {
         var bReceipts = 0
         var todoReceived = false
         var disconnectObserved = false
-        let senderModel = AppModel()
-        let receiverModel = AppModel()
+        let testRoot = FileManager.default.temporaryDirectory.appendingPathComponent("realtime-check-\(UUID())")
+        var suites: [String] = []
+        defer {
+            for suite in suites { UserDefaults.standard.removePersistentDomain(forName: suite) }
+            try? FileManager.default.removeItem(at: testRoot)
+        }
+        func isolatedModel() -> AppModel {
+            let suite = "CoupleMon.RealtimeCheck.\(UUID())"
+            suites.append(suite)
+            let folder = testRoot.appendingPathComponent(suite)
+            return AppModel(characterURL: folder.appendingPathComponent("character.png"),
+                            petDirectory: folder.appendingPathComponent("pet"), bundledPetDirectory: nil,
+                            defaults: UserDefaults(suiteName: suite)!)
+        }
+        let senderModel = isolatedModel()
+        let receiverModel = isolatedModel()
         senderModel.onSend = { a.send($0) }
         senderModel.onSendDrawing = { a.sendDrawing($0) }
         a.onMessage = { aMessages.append($0) }
@@ -170,7 +184,7 @@ struct RealtimeCheck {
         await b.disconnect()
         print("PASS: socket loss, automatic recovery, wake reconnect")
 
-        let model = AppModel()
+        let model = isolatedModel()
         model.sendDrawing(drawing)
         guard model.displayedDrawing == drawing, model.messageHistory.last?.isLocal == true else {
             throw CheckError.failed("Local drawing history")

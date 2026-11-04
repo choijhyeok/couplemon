@@ -21,10 +21,35 @@ struct PetActivity: Identifiable, Equatable {
             case .receivingLetter: .review
             }
         }
+
+        var action3D: Pet3DAction {
+            switch self {
+            case .chat: [.waving, .jumping, .lookAround, .running].randomElement()!
+            case .sendingLetter: .waving
+            case .receivingLetter: .review
+            }
+        }
     }
 
     let id = UUID()
     let kind: Kind
+    let action3D: Pet3DAction
+    init(kind: Kind) {
+        self.kind = kind
+        action3D = kind.action3D
+    }
+    init(action3D: Pet3DAction) {
+        kind = .chat
+        self.action3D = action3D
+    }
+
+    var event3D: String {
+        switch kind {
+        case .chat: "chat"
+        case .sendingLetter: "sendingLetter"
+        case .receivingLetter: "receivingLetter"
+        }
+    }
 }
 
 enum PetLetterAnimation {

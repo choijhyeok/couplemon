@@ -13,7 +13,6 @@ final class OverlayPanelController {
     private(set) var terminalController: TerminalWindowController?
     var onTerminalModeChange: ((Bool) -> Void)?
     private let compactSize = CGSize(width: 320, height: 410)
-    private let expandedSize = CGSize(width: 600, height: 410)
 
     init(model: AppModel) {
         self.model = model
@@ -62,14 +61,6 @@ final class OverlayPanelController {
             return
         }
         panel.isVisible ? panel.orderOut(nil) : show()
-    }
-
-    func setTodoVisible(_ isVisible: Bool) {
-        let size = isVisible ? expandedSize : compactSize
-        guard panel.frame.size != size else { return }
-        let oldFrame = panel.frame
-        let origin = CGPoint(x: oldFrame.maxX - size.width, y: oldFrame.minY)
-        panel.setFrame(CGRect(origin: origin, size: size), display: true, animate: true)
     }
 
     func focusChatInput() {

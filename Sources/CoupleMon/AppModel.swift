@@ -122,7 +122,20 @@ final class AppModel: ObservableObject {
     @Published var sendError: String?
     @Published private(set) var characterImage: NSImage?
     @Published private(set) var hatchPet: HatchPet?
+    @Published private(set) var pet3D: Pet3DAsset?
+    let together: CouplePetSession
+    @Published private(set) var petProgress: PetProgress
+    @Published private(set) var equippedRewardLevel: Int?
+    var equippedReward: PetLevelReward? { equippedRewardLevel.flatMap(PetLevelReward.reward) }
+    var unlockedRewards: [PetLevelReward] {
+        guard petProgress.level >= 2 else { return [] }
+        return (2...petProgress.level).compactMap(PetLevelReward.reward)
+    }
+    var pet3DModelURL: URL? { pet3D.map { pet3DLibrary.modelURL(for: $0) } }
     @Published private(set) var petActivity: PetActivity?
+    @Published private(set) var isRandom3DEnabled: Bool
+    @Published private(set) var random3DInterval: Int
+    static let random3DIntervals = [3, 5, 10, 15, 30]
     @Published private(set) var characterScale: CGFloat
     @Published private(set) var isBubbleVisible = true
     @Published private(set) var todoItems: [TodoItem]
@@ -134,7 +147,6 @@ final class AppModel: ObservableObject {
     var onSend: ((String) -> Void)?
     var onSendDrawing: ((DrawingMessage) -> Void)?
     var onCharacterScaleChange: ((CGFloat) -> Void)?
-    var onTodoVisibilityChange: ((Bool) -> Void)?
     var onTodoMutation: (() -> Void)?
     var onTerminalModeChange: ((Bool) -> Void)?
 
@@ -142,6 +154,7 @@ final class AppModel: ObservableObject {
     private let petDirectory: URL
     private let bundledPetDirectory: URL?
     private let defaults: UserDefaults
+    let pet3DLibrary: Pet3DLibrary
     private(set) var todoOwnerID: UUID
     private(set) var pendingTodoMutations: [TodoMutation]
     private(set) var todoMutationRevision = 0
@@ -156,7 +169,8 @@ final class AppModel: ObservableObject {
         petDirectory: URL? = nil,
         bundledPetDirectory: URL? = Bundle.main.resourceURL?
             .appendingPathComponent("DefaultPet", isDirectory: true),
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        pet3DLibrary: Pet3DLibrary? = nil
     ) {
         let resolvedCharacterURL = characterURL ?? Self.defaultCharacterURL
         let resolvedPetDirectory = petDirectory ?? Self.defaultPetDirectory
@@ -164,6 +178,19 @@ final class AppModel: ObservableObject {
         self.petDirectory = resolvedPetDirectory
         self.bundledPetDirectory = bundledPetDirectory
         self.defaults = defaults
+        isRandom3DEnabled = defaults.bool(forKey: Self.random3DEnabledKey)
+        let savedInterval = defaults.integer(forKey: Self.random3DIntervalKey)
+        random3DInterval = Self.random3DIntervals.contains(savedInterval) ? savedInterval : 5
+        petProgress = PetProgress(experience: defaults.integer(forKey: Self.petExperienceKey))
+        let savedReward = defaults.integer(forKey: Self.petRewardKey)
+        let savedLevel = PetProgress(experience: defaults.integer(forKey: Self.petExperienceKey)).level
+        equippedRewardLevel = savedLevel < 2 ? nil : ((2...savedLevel).contains(savedReward) ? savedReward : savedLevel)
+        let library = pet3DLibrary ?? Pet3DLibrary(directory: resolvedCharacterURL.deletingLastPathComponent()
+            .appendingPathComponent("3DCharacters", isDirectory: true))
+        self.pet3DLibrary = library
+        together = CouplePetSession(cache: resolvedCharacterURL.deletingLastPathComponent().appendingPathComponent("PartnerCharacters"))
+        let saved3DID = defaults.string(forKey: Self.pet3DSelectionKey)
+        pet3D = (try? library.assets())?.first { $0.id.uuidString == saved3DID }
         let resolvedTodoOwnerID: UUID
         if
             let value = defaults.string(forKey: Self.todoOwnerIDKey),
@@ -198,12 +225,17 @@ final class AppModel: ObservableObject {
             ? 1
             : defaults.double(forKey: Self.characterScaleKey)
         characterScale = CGFloat(min(1.3, max(0.7, savedScale)))
+        together.setLocal(url: pet3DModelURL, name: pet3D?.name ?? "캐릭터")
+        together.suspended = isTerminalMode
     }
 
     func send(_ rawValue: String) {
         let message = MessageText.normalize(rawValue)
         guard !message.isEmpty else { return }
         record(message, isLocal: true)
+        let isEmoji = CoupleMonEmoticon(messageValue: message) != nil
+            || CoupleMonAnimatedEmoticon(messageValue: message) != nil || PetProgress.isEmojiOnly(message)
+        awardExperience(isEmoji ? .emoji : .chat)
         onSend?(message)
     }
 
@@ -216,7 +248,9 @@ final class AppModel: ObservableObject {
     func setTerminalMode(_ enabled: Bool) {
         guard isTerminalMode != enabled else { return }
         isTerminalMode = enabled
+        together.suspended = enabled
         if enabled {
+            dismissTodo()
             petActivity = nil
             letterDismissTask?.cancel()
             letterDismissTask = nil
@@ -241,6 +275,7 @@ final class AppModel: ObservableObject {
     func sendDrawing(_ drawing: DrawingMessage) {
         guard drawing.isValid else { return }
         record("손그림", isLocal: true, drawing: drawing)
+        awardExperience(.drawing)
         enqueueDrawingLetter(drawing, isLocal: true)
         onSendDrawing?(drawing)
     }
@@ -404,12 +439,16 @@ final class AppModel: ObservableObject {
     func setTodoEnabled(_ isEnabled: Bool) {
         isTodoEnabled = isEnabled
         defaults.set(isEnabled, forKey: Self.todoEnabledKey)
-        if !isEnabled { setTodoVisible(false) }
+        if !isEnabled { dismissTodo() }
     }
 
     func toggleTodoVisibility() {
         guard isTodoEnabled else { return }
-        setTodoVisible(!isTodoVisible)
+        isTodoVisible.toggle()
+    }
+
+    func dismissTodo() {
+        isTodoVisible = false
     }
 
     func requestChatFocus() {
@@ -489,9 +528,56 @@ final class AppModel: ObservableObject {
         showBubble()
     }
 
-    private func setTodoVisible(_ isVisible: Bool) {
-        self.isTodoVisible = isVisible
-        onTodoVisibilityChange?(isVisible)
+    private func awardExperience(_ activity: PetProgress.Activity) {
+        let previous = petProgress.level
+        petProgress.award(activity)
+        defaults.set(petProgress.experience, forKey: Self.petExperienceKey)
+        if petProgress.level > previous { equipReward(at: petProgress.level); playEquippedInteraction() }
+    }
+
+    func equipReward(at level: Int) {
+        guard level <= petProgress.level, PetLevelReward.reward(at: level) != nil else { return }
+        equippedRewardLevel = level
+        defaults.set(level, forKey: Self.petRewardKey)
+    }
+
+    func playEquippedInteraction() {
+        guard pet3D != nil, !isTerminalMode, let reward = equippedReward else { return }
+        play3DAction(reward.action)
+    }
+
+    func play3DAction(_ action: Pet3DAction) {
+        guard pet3D != nil, !isTerminalMode,
+              Pet3DAction.basicActions.contains(action) || equippedReward?.action == action else { return }
+        if action == .idle { setRandom3DEnabled(false) }
+        petActivity = PetActivity(action3D: action)
+    }
+
+    func setRandom3DEnabled(_ enabled: Bool) {
+        guard !enabled || (pet3D != nil && !isTerminalMode) else { return }
+        guard isRandom3DEnabled != enabled else { return }
+        isRandom3DEnabled = enabled
+        defaults.set(enabled, forKey: Self.random3DEnabledKey)
+        if !enabled { petActivity = PetActivity(action3D: .idle) }
+    }
+
+    func setRandom3DInterval(_ seconds: Int) {
+        guard Self.random3DIntervals.contains(seconds) else { return }
+        random3DInterval = seconds
+        defaults.set(seconds, forKey: Self.random3DIntervalKey)
+    }
+
+    func playRandom3DAction() {
+        var actions = Pet3DAction.basicActions.filter { $0 != .idle && $0 != petActivity?.action3D }
+        if let reward = equippedReward { actions.append(reward.action) }
+        if let selected = actions.randomElement() { play3DAction(selected) }
+    }
+
+    func playRewardInteraction(at level: Int) {
+        guard pet3D != nil, !isTerminalMode, level <= petProgress.level,
+              let reward = PetLevelReward.reward(at: level) else { return }
+        equipReward(at: level)
+        play3DAction(reward.action)
     }
 
     private func saveTodos() {
@@ -538,6 +624,7 @@ final class AppModel: ObservableObject {
         characterImage = NSImage(data: pngData)
         hatchPet = nil
         petActivity = nil
+        clear3DSelection()
     }
 
     func selectHatchPet(from sourceDirectory: URL) throws {
@@ -579,6 +666,23 @@ final class AppModel: ObservableObject {
         characterImage = nil
         petActivity = nil
         try? fileManager.removeItem(at: characterURL)
+        clear3DSelection()
+    }
+
+    func select3DCharacter(_ asset: Pet3DAsset) throws {
+        guard try pet3DLibrary.assets().contains(asset) else { throw Pet3DError.message("저장된 3D 캐릭터를 찾을 수 없습니다.") }
+        let data = try Data(contentsOf: pet3DLibrary.modelURL(for: asset))
+        try Pet3DLibrary.validateGLB(data)
+        pet3D = asset
+        petActivity = nil
+        defaults.set(asset.id.uuidString, forKey: Self.pet3DSelectionKey)
+        together.setLocal(url: pet3DModelURL, name: asset.name)
+    }
+
+    private func clear3DSelection() {
+        pet3D = nil
+        together.setLocal(url: nil)
+        defaults.removeObject(forKey: Self.pet3DSelectionKey)
     }
 
     func resetCharacter() throws {
@@ -592,6 +696,7 @@ final class AppModel: ObservableObject {
         characterImage = nil
         hatchPet = bundledPetDirectory.flatMap { try? HatchPetPackage.load(from: $0) }
         petActivity = nil
+        clear3DSelection()
     }
 
     private static var defaultCharacterURL: URL {
@@ -607,6 +712,11 @@ final class AppModel: ObservableObject {
     }
 
     private static let characterScaleKey = "characterScale"
+    private static let pet3DSelectionKey = "pet3DSelection"
+    private static let petExperienceKey = "petExperience"
+    private static let random3DEnabledKey = "random3DEnabled"
+    private static let random3DIntervalKey = "random3DInterval"
+    private static let petRewardKey = "petEquippedRewardLevel"
     private static let todoItemsKey = "todoItems"
     private static let pendingTodoMutationsKey = "pendingTodoMutations"
     private static let todoEnabledKey = "todoEnabled"

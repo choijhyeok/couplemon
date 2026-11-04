@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let updateService = UpdateService()
     private var overlayController: OverlayPanelController!
     private var menuBarController: MenuBarController!
+    private var pet3DController: Pet3DWindowController?
     private var isCheckingForUpdates = false
     private var chatHotKey: EventHotKeyRef?
     private var todoHotKey: EventHotKeyRef?
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuBarController.onChooseCharacter = { [weak self] in self?.chooseCharacter() }
         menuBarController.onChooseHatchPet = { [weak self] in self?.chooseHatchPet() }
+        menuBarController.onOpen3DCharacters = { [weak self] in self?.show3DCharacters() }
         menuBarController.onIncreaseCharacterSize = { [weak self] in self?.model.resizeCharacter(by: 0.1) }
         menuBarController.onDecreaseCharacterSize = { [weak self] in self?.model.resizeCharacter(by: -0.1) }
         menuBarController.onResetCharacterSize = { [weak self] in self?.model.resetCharacterSize() }
@@ -59,11 +61,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model.onSend = { [weak self] message in self?.realtime.send(message) }
         model.onSendDrawing = { [weak self] drawing in self?.realtime.sendDrawing(drawing) }
+        model.together.send = { [weak realtime = realtime] packet in
+            guard let realtime else { throw URLError(.notConnectedToInternet) }
+            try await realtime.sendPetPacket(packet)
+        }
+        realtime.onPetPacket = { [weak self] in self?.model.together.receive($0) }
+        realtime.onPetConnection = { [weak self] connected, room in self?.model.together.setConnection(connected, room: room) }
+        realtime.onPetTick = { [weak self] in self?.model.together.announce() }
         model.onCharacterScaleChange = { [weak self] scale in
             self?.menuBarController.setCharacterScale(scale)
-        }
-        model.onTodoVisibilityChange = { [weak self] isVisible in
-            self?.overlayController.setTodoVisible(isVisible)
         }
         model.onTodoMutation = { [weak self] in
             self?.requestTodoSync()
@@ -101,9 +107,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in await self?.realtime.reconnect() }
         }
         overlayController.show()
+        if CommandLine.arguments.contains("--3d-studio") { show3DCharacters() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        pet3DController?.cancelGeneration()
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         if let chatHotKey { UnregisterEventHotKey(chatHotKey) }
         if let todoHotKey { UnregisterEventHotKey(todoHotKey) }
@@ -136,6 +144,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editItem.submenu = editMenu
         mainMenu.addItem(editItem)
         NSApp.mainMenu = mainMenu
+    }
+
+    private func show3DCharacters() {
+        if pet3DController == nil { pet3DController = Pet3DWindowController(model: model) }
+        pet3DController?.show()
     }
 
     private func chooseCharacter() {

@@ -21,7 +21,7 @@ let package = Package(
                 .product(name: "PostgREST", package: "supabase-swift"),
                 .product(name: "Realtime", package: "supabase-swift"),
             ],
-            resources: [.process("Resources")]
+            resources: [.process("Resources/Emoticons"), .copy("Resources/Pet3D")]
         ),
         .testTarget(name: "CoupleMonTests", dependencies: ["CoupleMon"]),
     ]
