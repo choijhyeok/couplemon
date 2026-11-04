@@ -125,7 +125,11 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
             try require(try await js(web, "window.pet3D.state.action") as? String == action.rawValue, "Action playback \(action)")
         }
         _ = try await js(web, "window.pet3D.playAction('jumping')")
-        try await Task.sleep(for: .seconds(3))
+        // Imported clips can be longer than the procedural fallback's 1.8 seconds.
+        for _ in 0..<100 {
+            if try await js(web, "window.pet3D.state.action") as? String == "idle" { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
         try require(try await js(web, "window.pet3D.state.action") as? String == "idle", "One-shot action did not return to idle")
         _ = try await js(web, "window.pet3D.setReducedMotion(true); window.pet3D.playAction('waving', 'sendingLetter')")
         try await Task.sleep(for: .milliseconds(150))

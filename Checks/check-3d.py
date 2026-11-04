@@ -24,6 +24,7 @@ app = root / ".build/Pet3DCheck.app/Contents"
 (app / "MacOS").mkdir(parents=True, exist_ok=True)
 native = app / "MacOS/pet3d-check"
 shutil.copy2(executable, native)
+shutil.copytree(build / "CoupleMon_CoupleMon.bundle", app / "Resources/CoupleMon_CoupleMon.bundle", dirs_exist_ok=True)
 (app / "Info.plist").write_bytes(plistlib.dumps({
     "CFBundleIdentifier": "com.couplemon.pet3d-check", "CFBundleName": "Pet3DCheck",
     "CFBundleExecutable": "pet3d-check", "CFBundlePackageType": "APPL",

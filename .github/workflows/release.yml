@@ -25,6 +25,12 @@ jobs:
           COUPLEMON_VERSION="$version" COUPLEMON_BUILD="$GITHUB_RUN_NUMBER" ./Scripts/package-installer.sh
           test "$(plutil -extract CFBundleShortVersionString raw dist/CoupleMon.app/Contents/Info.plist)" = "$version"
           codesign --verify --deep --strict --verbose=2 dist/CoupleMon.app
+          relocated=$(mktemp -d)
+          build_resources="$(swift build -c release --show-bin-path)/CoupleMon_CoupleMon.bundle"
+          trap 'if [ -d "$relocated/build-resources" ]; then mv "$relocated/build-resources" "$build_resources"; fi; rm -rf "$relocated"' EXIT
+          cp -RX dist/CoupleMon.app "$relocated/CoupleMon.app"
+          mv "$build_resources" "$relocated/build-resources"
+          "$relocated/CoupleMon.app/Contents/MacOS/CoupleMon" --check-resources
           for resource in viewer.html viewer.js couple-scene.js motion-player.js generation-prompt.txt build-model.py pet-actions.py vendor/three.module.min.js vendor/three.core.min.js vendor/GLTFLoader.js vendor/LICENSE; do
             test -s "dist/CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/Pet3D/$resource"
           done

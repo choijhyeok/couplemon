@@ -23,8 +23,8 @@ final class Pet3DSchemeHandler: NSObject, WKURLSchemeHandler {
             let mime: String
             if url.path == "/model.glb" { file = modelURL; mime = "model/gltf-binary" }
             else if url.path == "/partner.glb", let partnerURL { file = partnerURL; mime = "model/gltf-binary" }
-            else if let entry = files[url.path], let resources = Bundle.module.resourceURL {
-                file = resources.appendingPathComponent("Pet3D").appendingPathComponent(entry.0)
+            else if let entry = files[url.path], let resource = Pet3DResources.url(for: entry.0) {
+                file = resource
                 mime = entry.1
             } else { throw URLError(.fileDoesNotExist) }
             let data = try Data(contentsOf: file)

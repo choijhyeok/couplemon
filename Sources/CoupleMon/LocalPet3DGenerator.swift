@@ -43,7 +43,7 @@ enum Pet3DPrompt {
     static let schema = #"{"type":"object","properties":{"script":{"type":"string"}},"required":["script"],"additionalProperties":false}"#
 
     static func make(instructions: String, repair: String? = nil) throws -> String {
-        guard let url = Bundle.module.url(forResource: "generation-prompt", withExtension: "txt", subdirectory: "Pet3D") else {
+        guard let url = Pet3DResources.url(for: "generation-prompt.txt") else {
             throw Pet3DError.message("3D 생성 프롬프트를 찾을 수 없습니다.")
         }
         var prompt = try String(contentsOf: url, encoding: .utf8)
@@ -116,7 +116,7 @@ final class LocalPet3DGenerator: ObservableObject {
         try image.write(to: root.appendingPathComponent("reference.png"), options: .atomic)
         try Data(Pet3DPrompt.schema.utf8).write(to: root.appendingPathComponent("schema.json"))
         for file in ["build-model", "pet-actions"] {
-            guard let templateURL = Bundle.module.url(forResource: file, withExtension: "py", subdirectory: "Pet3D") else {
+            guard let templateURL = Pet3DResources.url(for: "\(file).py") else {
                 throw Pet3DError.message("3D 동작 생성 파일을 찾을 수 없습니다.")
             }
             try FileManager.default.copyItem(at: templateURL, to: root.appendingPathComponent("\(file).py"))

@@ -25,6 +25,7 @@ app = root / ".build/CouplePetCheck.app/Contents"
 executable = app / "MacOS/couple-check"
 subprocess.run(["swiftc", "-parse-as-library", "-I", str(build), str(root / "Checks/CouplePetCheck.swift"), *objects, "-o", str(executable)], check=True)
 (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.couplemon.couple-check", "CFBundleExecutable": "couple-check", "CFBundlePackageType": "APPL", "LSUIElement": True}))
+shutil.copytree(build / "CoupleMon_CoupleMon.bundle", app / "Resources/CoupleMon_CoupleMon.bundle", dirs_exist_ok=True)
 subprocess.run(["codesign", "--force", "--sign", "-", str(app.parent)], check=True)
 server = server_module.http.server.ThreadingHTTPServer(("127.0.0.1", 0), server_module.WebSocket)
 server.daemon_threads = True
