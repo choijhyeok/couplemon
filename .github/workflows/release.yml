@@ -17,6 +17,9 @@ jobs:
         run: |
           swift build -Xswiftc -warnings-as-errors
           swift test
+          for module in viewer.js motion-player.js illustrated-motion.js couple-scene.js; do
+            node --input-type=module --check < "Sources/CoupleMon/Resources/Pet3D/$module"
+          done
       - name: Build installer
         shell: bash
         run: |
@@ -31,7 +34,7 @@ jobs:
           cp -RX dist/CoupleMon.app "$relocated/CoupleMon.app"
           mv "$build_resources" "$relocated/build-resources"
           "$relocated/CoupleMon.app/Contents/MacOS/CoupleMon" --check-resources
-          for resource in viewer.html viewer.js couple-scene.js motion-player.js generation-prompt.txt build-model.py pet-actions.py vendor/three.module.min.js vendor/three.core.min.js vendor/GLTFLoader.js vendor/LICENSE; do
+          for resource in viewer.html viewer.js couple-scene.js motion-player.js illustrated-motion.js generation-prompt.txt image-rig-prompt.txt image-rig.py build-model.py pet-actions.py vendor/three.module.min.js vendor/three.core.min.js vendor/GLTFLoader.js vendor/LICENSE; do
             test -s "dist/CoupleMon.app/Contents/Resources/CoupleMon_CoupleMon.bundle/Pet3D/$resource"
           done
           pkgutil --payload-files dist/CoupleMon.pkg | grep -q '^\./CoupleMon.app/Contents/MacOS/CoupleMon$'

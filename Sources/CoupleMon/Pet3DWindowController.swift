@@ -1,5 +1,4 @@
 import AppKit
-import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -25,8 +24,11 @@ struct Pet3DStudioView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var generator: LocalPet3DGenerator
     @State private var agent = Pet3DAgent.codex
+    @State private var generationMode = Pet3DGenerationMode.illustrated
     @State private var image: NSImage?
     @State private var imageData: Data?
+    @State private var isImportingImage = false
+    @State private var isImageDropTargeted = false
     @State private var name = ""
     @State private var instructions = ""
     @State private var assets: [Pet3DAsset] = []
@@ -46,7 +48,7 @@ struct Pet3DStudioView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 15) {
                     Text("이미지로 3D 캐릭터 만들기").font(.title2.bold())
-                    Text("Claude/Codex가 이미지를 보고 모델링 코드를 작성하고, Blender가 이 Mac에서 3D 캐릭터를 만듭니다.")
+                    Text("원본 그림의 외형을 유지하며 움직이는 2.5D 또는 사방에서 볼 수 있는 입체 3D 캐릭터를 만듭니다.")
                         .font(.callout).foregroundStyle(.secondary)
                     Button(action: chooseImage) {
                         ZStack {
@@ -57,13 +59,35 @@ struct Pet3DStudioView: View {
                                 VStack(spacing: 8) {
                                     Image(systemName: "photo.badge.plus").font(.system(size: 30))
                                     Text("캐릭터 이미지 선택")
+                                    Text("이미지를 끌어놓거나 ⌘V로 붙여넣기").font(.caption)
                                     Text("PNG · JPEG · WebP, 최대 20MB").font(.caption).foregroundStyle(.secondary)
                                 }
                             }
                         }.frame(height: 140)
                     }
-                    .buttonStyle(.plain).disabled(generator.isRunning)
+                    .buttonStyle(.plain).disabled(generator.isRunning || isImportingImage)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 14)
+                            .strokeBorder(isImageDropTargeted ? Color.accentColor : .clear, lineWidth: 3)
+                            .allowsHitTesting(false)
+                    }
+                    .onDrop(of: [UTType.image, .fileURL], isTargeted: $isImageDropTargeted, perform: dropImages)
+                    HStack {
+                        Button("이미지 붙여넣기", systemImage: "doc.on.clipboard", action: pasteImage)
+                            .disabled(generator.isRunning || isImportingImage)
+                            .help("복사한 이미지나 이미지 파일을 붙여넣습니다 (⌘V).")
+                        if isImportingImage { ProgressView().controlSize(.small) }
+                        Spacer()
+                        Text("드래그 앤 드롭 · ⌘V").foregroundStyle(.secondary)
+                    }.font(.caption)
                     TextField("캐릭터 이름", text: $name).textFieldStyle(.roundedBorder).disabled(generator.isRunning)
+                    Picker("생성 방식", selection: $generationMode) {
+                        ForEach(Pet3DGenerationMode.allCases) { Text($0.title).tag($0) }
+                    }.pickerStyle(.segmented).disabled(generator.isRunning)
+                    Text(generationMode == .illustrated
+                         ? "원본 색·선·얼굴을 텍스처로 보존하고, 머리와 몸에 깊이와 움직임을 더합니다. 정면 중심으로 감상합니다. 투명 PNG가 가장 정확합니다."
+                         : "원본을 참고해 메시와 재질을 새로 만듭니다. 뒷면을 포함해 360° 회전할 수 있습니다.")
+                        .font(.caption).foregroundStyle(.secondary)
                     Picker("생성 도구", selection: $agent) {
                         ForEach(Pet3DAgent.allCases) { Text($0.title).tag($0) }
                     }.pickerStyle(.segmented).disabled(generator.isRunning)
@@ -84,17 +108,17 @@ struct Pet3DStudioView: View {
                         Spacer()
                         Button("설치 다시 확인") { refreshTools() }
                     }.font(.caption).disabled(generator.isRunning)
-                    TextField("추가 요청 (선택): 귀를 짧게, 원본 색 유지…", text: $instructions, axis: .vertical)
+                    TextField(generationMode == .illustrated ? "추가 요청 (선택): 머리와 앞발 중심으로 움직이기…" : "추가 요청 (선택): 귀를 짧게, 원본 색 유지…", text: $instructions, axis: .vertical)
                         .lineLimit(2...3).textFieldStyle(.roundedBorder).disabled(generator.isRunning)
                     HStack {
                         Button("3D 생성 시작", systemImage: "sparkles") {
                             guard let imageData, let agentURL, let blenderURL else { return }
                             error = nil
                             generator.start(image: imageData, name: name, instructions: instructions,
-                                            agent: agent, executable: agentURL, blender: blenderURL)
+                                            agent: agent, executable: agentURL, blender: blenderURL, mode: generationMode)
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(generator.isRunning || imageData == nil || agentURL == nil || blenderURL == nil)
+                        .disabled(generator.isRunning || isImportingImage || imageData == nil || agentURL == nil || blenderURL == nil)
                         if generator.isRunning { Button("중지") { generator.cancel() } }
                     }
                     if generator.isRunning || generator.workspace != nil {
@@ -121,7 +145,7 @@ struct Pet3DStudioView: View {
                     if let message = error ?? generator.error {
                         Text(message).font(.callout).foregroundStyle(.red).textSelection(.enabled)
                     }
-                    Text("이미지는 선택한 AI 서비스로 전송됩니다. CLI 로그인과 이용 한도가 적용됩니다. 결과는 원본을 참고한 3D 재해석이며, 보이지 않는 부분은 추정합니다.")
+                    Text("이미지는 선택한 AI 서비스로 전송됩니다. CLI 로그인과 이용 한도가 적용됩니다. 2.5D는 원본을 변형하며, 입체 3D는 보이지 않는 부분을 추정합니다.")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(20)
             }.frame(minWidth: 400, idealWidth: 420)
@@ -209,6 +233,8 @@ struct Pet3DStudioView: View {
               }.padding(20)
             }.frame(minWidth: 310, idealWidth: 350)
         }
+        .background(PetImagePasteShortcut(isEnabled: !generator.isRunning && !isImportingImage, onPaste: { pasteImage(from: $0) })
+            .frame(width: 0, height: 0))
         .onAppear {
             refreshAssets()
             refreshTools()
@@ -260,26 +286,33 @@ struct Pet3DStudioView: View {
         let picker = NSOpenPanel()
         picker.allowedContentTypes = [.png, .jpeg, .webP]
         guard picker.runModal() == .OK, let url = picker.url else { return }
-        let access = url.startAccessingSecurityScopedResource()
-        defer { if access { url.stopAccessingSecurityScopedResource() } }
-        do {
-            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-            guard size <= 20 * 1024 * 1024 else { throw Pet3DError.message("20MB 이하 이미지를 선택하세요.") }
-            let data = try Data(contentsOf: url)
-            guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-                  let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                    kCGImageSourceCreateThumbnailFromImageAlways: true,
-                    kCGImageSourceCreateThumbnailWithTransform: true,
-                    kCGImageSourceThumbnailMaxPixelSize: 1536,
-                  ] as CFDictionary),
-                  let png = NSBitmapImageRep(cgImage: thumbnail).representation(using: .png, properties: [:]) else {
-                throw Pet3DError.message("이미지를 읽을 수 없습니다.")
-            }
-            imageData = png
-            image = NSImage(data: png)
-            name = url.deletingPathExtension().lastPathComponent
-            error = nil
-        } catch { self.error = error.localizedDescription }
+        do { applyImage(try PetReferenceImage.read(url: url)) }
+        catch { self.error = error.localizedDescription }
+    }
+    private func applyImage(_ reference: PetReferenceImage) {
+        imageData = reference.png
+        image = NSImage(data: reference.png)
+        if let suggestedName = reference.suggestedName { name = suggestedName }
+        else if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { name = "내 캐릭터" }
+        error = nil
+    }
+    private func pasteImage() {
+        pasteImage(from: .general)
+    }
+    private func pasteImage(from pasteboard: NSPasteboard) {
+        guard !generator.isRunning && !isImportingImage else { return }
+        do { applyImage(try PetReferenceImage.read(pasteboard: pasteboard)) }
+        catch { self.error = error.localizedDescription }
+    }
+    private func dropImages(_ providers: [NSItemProvider]) -> Bool {
+        guard !generator.isRunning, !isImportingImage, providers.contains(where: PetReferenceImage.accepts) else { return false }
+        isImportingImage = true
+        Task { @MainActor in
+            defer { isImportingImage = false }
+            do { applyImage(try await PetReferenceImage.read(providers: providers)) }
+            catch { self.error = error.localizedDescription }
+        }
+        return true
     }
     private func importGLB() {
         let picker = NSOpenPanel()

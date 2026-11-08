@@ -71,6 +71,13 @@ def add_pet_actions(root):
         joint = bpy.data.objects.get(name)
         if joint and joint in root.children_recursive:
             joints[role] = joint
+    image_rig = next((obj for obj in objects if obj.type == "ARMATURE" and obj.get("couplemon_image_rig")), None)
+    if image_rig:
+        for role, name in [("head", "pet_head"), ("left", "pet_arm_l"), ("right", "pet_arm_r"),
+                           ("leg_l", "pet_leg_l"), ("leg_r", "pet_leg_r"), ("tail", "pet_tail")]:
+            bone = image_rig.pose.bones.get(name)
+            if bone:
+                joints[role] = bone
     # Generated actions replace ad-hoc animations so clip names and neutral poses stay predictable.
     for obj in [root] + list(root.children_recursive):
         obj.animation_data_clear()
@@ -79,24 +86,28 @@ def add_pet_actions(root):
         obj.rotation_mode = "XYZ"
         base[role] = (obj.location.copy(), obj.rotation_euler.copy(), obj.scale.copy())
 
+    owners = {role: (image_rig if isinstance(obj, bpy.types.PoseBone) else obj) for role, obj in joints.items()}
     for name in ACTION_NAMES:
         duration = 96 if name == "celebrate100" else (72 if name == "idle" or name not in ACTION_NAMES[:10] else 48)
+        for owner in set(owners.values()):
+            owner.animation_data_create()
+            owner.animation_data.action = None
         for role, obj in joints.items():
-            obj.animation_data_create()
-            obj.animation_data.action = None
             for frame in range(1, duration + 1, 3):
-                _key_pose(obj, role, name, frame, duration, base[role])
-            _key_pose(obj, role, name, duration, duration, base[role])
-            action = obj.animation_data.action
-            action.name = "CoupleMon_" + name + "_" + role
-            track = obj.animation_data.nla_tracks.new()
+                _key_pose(obj, role, name, frame, duration, base[role], illustrated=bool(image_rig))
+            _key_pose(obj, role, name, duration, duration, base[role], illustrated=bool(image_rig))
+        for owner in set(owners.values()):
+            action = owner.animation_data.action
+            action.name = "CoupleMon_" + name + "_" + owner.name
+            track = owner.animation_data.nla_tracks.new()
             # Equal track names merge all body parts into ONE glTF clip per behavior.
             track.name = name
             strip = track.strips.new(name, 1, action)
             strip.extrapolation = "NOTHING"
             strip.blend_type = "REPLACE"
             track.mute = True
-            obj.animation_data.action = None
+            owner.animation_data.action = None
+        for role, obj in joints.items():
             obj.location, obj.rotation_euler, obj.scale = base[role]
     scene.frame_start = 1
     scene.frame_end = 72
@@ -105,7 +116,7 @@ def add_pet_actions(root):
     print("COUPLEMON_ACTIONS " + ",".join(ACTION_NAMES), flush=True)
 
 
-def _key_pose(obj, role, action, frame, duration, base):
+def _key_pose(obj, role, action, frame, duration, base, illustrated=False):
     t = (frame - 1) / (duration - 1)
     envelope = math.sin(math.pi * t) ** 2
     cycle = math.sin(2 * math.pi * t)
@@ -182,6 +193,13 @@ def _key_pose(obj, role, action, frame, duration, base):
                     rotation[2] += 0.2 * run
     elif role in ("leg_l", "leg_r") and action.startswith("running"):
         rotation[0] += (0.5 if role == "leg_l" else -0.5) * run
+    if illustrated:
+        # Large 3D rotations expose a drawing's unseen side and stretch its seams.
+        # Keep screen-plane gestures, with smaller yaw/nod and leg swings.
+        rotation[0] = base[1][0] + (rotation[0] - base[1][0]) * 0.3
+        rotation[2] = base[1][2] + (rotation[2] - base[1][2]) * 0.3
+        if role in ("left", "right"):
+            rotation[1] = base[1][1] + (rotation[1] - base[1][1]) * 0.45
     obj.location, obj.rotation_euler, obj.scale = location, rotation, scale
     for path in ("location", "rotation_euler", "scale"):
         obj.keyframe_insert(data_path=path, frame=frame)

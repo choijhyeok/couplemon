@@ -40,6 +40,7 @@ export class RewardItem {
     model.traverse(object => {
       if (/pet_hand_r|paw_holding_heart_?001/i.test(object.name)) this.anchor = object;
     });
+    this.anchor = model.getObjectByName('pet_anchor_hand_r') || this.anchor;
   }
   setReward(reward) {
     if (this.reward?.level === reward?.level) return;

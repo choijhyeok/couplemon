@@ -11,6 +11,7 @@ final class Pet3DSchemeHandler: NSObject, WKURLSchemeHandler {
             let files: [String: (String, String)] = [
                 "/viewer.html": ("viewer.html", "text/html"), "/viewer.js": ("viewer.js", "text/javascript"),
                 "/motion-player.js": ("motion-player.js", "text/javascript"),
+                "/illustrated-motion.js": ("illustrated-motion.js", "text/javascript"),
                 "/couple-scene.js": ("couple-scene.js", "text/javascript"),
                 "/pet-props.js": ("pet-props.js", "text/javascript"),
                 "/reward-items.js": ("reward-items.js", "text/javascript"),

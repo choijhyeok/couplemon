@@ -14,10 +14,18 @@ scene.frame_start = 1
 scene.frame_end = 72
 scene.render.fps = 24
 print("COUPLEMON_STAGE modeling", flush=True)
+with open(os.path.join(workspace, "image-rig.py"), encoding="utf-8") as rig_file:
+    rig_globals = {}
+    exec(compile(rig_file.read(), "image-rig.py", "exec"), rig_globals)
+
+def image_character(**anchors):
+    return rig_globals["build_image_character"](root, workspace, **anchors)
+
 with open(os.path.join(workspace, "character.py"), encoding="utf-8") as script_file:
     script = script_file.read()
 exec(compile(script, "character.py", "exec"), {
     "__name__": "__character__", "bpy": bpy, "math": math, "Vector": Vector, "root": root,
+    "image_character": image_character,
 })
 scene.frame_set(1)
 with open(os.path.join(workspace, "pet-actions.py"), encoding="utf-8") as actions_file:
@@ -81,6 +89,7 @@ if "export_merge_animation" in bpy.ops.export_scene.gltf.get_rna_type().properti
 bpy.ops.export_scene.gltf(
     filepath=os.path.join(workspace, "model.glb"), export_format="GLB",
     use_selection=True, export_animations=True, export_yup=True, export_animation_mode="ACTIONS",
+    export_extras=True,
     export_draco_mesh_compression_enable=False,
     **animation_options,
 )
@@ -113,6 +122,8 @@ scene.render.resolution_x = 384
 scene.render.resolution_y = 384
 scene.render.resolution_percentage = 100
 scene.render.film_transparent = True
+if root.get("couplemon_render_mode") == "illustrated":
+    scene.view_settings.view_transform = "Standard"
 scene.render.image_settings.file_format = "PNG"
 scene.render.filepath = os.path.join(workspace, "preview.png")
 print("COUPLEMON_STAGE preview", flush=True)

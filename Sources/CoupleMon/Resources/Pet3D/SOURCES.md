@@ -2,6 +2,24 @@
 
 Prompt is authored for CoupleMon, not copied from a third-party prompt pack.
 
+- LivLiv Player: https://github.com/livliv-dev/player
+  Reviewed `src/runtime/puppet.ts` (head paraboloid, anchor-based grid deformation,
+  depth/parallax) and `FORMAT.md` (drawing coordinates and rig anchors).
+  `image-rig.py` independently implements a curved original-image UV grid with
+  continuous skin weights and glTF bone animation. It does not copy LivLiv code,
+  its models, textures, brand assets, or its unpublished AI generation pipeline.
+  Source artwork remains the user's. This mode preserves the front illustration;
+  it does not reconstruct unseen geometry. `illustrated-motion.js` independently
+  implements asynchronous gaze/head/body motion, damped follow-through and a
+  continuous breathing field with fixed feet, inspired by `src/runtime/idle.ts`.
+- Mesh Avatar Studio: https://github.com/shinshin86/mesh-avatar-studio/blob/main/docs/format.md
+  Separate source-eye patches and a filled backing informed the generated eye rig.
+  Our small backing uses neighboring skin/fur interpolation; closing lids and a
+  curved closed-eye stroke are local geometry, not copied or AI-generated art.
+- Live2D physics: https://docs.live2d.com/4.2/en/cubism-editor-manual/physics-operation/
+  Input-driven secondary motion informed damped ear/tail follow-through. No Cubism
+  SDK or Live2D model files are used.
+
 - BlenderAlchemy authors' implementation: https://github.com/ianhuang0630/BlenderAlchemyOfficial
   Image-grounded procedural edits and execution-feedback iteration inspired the image inspection and one repair pass.
 - BlenderLLM authors' implementation: https://github.com/FreedomIntelligence/BlenderLLM

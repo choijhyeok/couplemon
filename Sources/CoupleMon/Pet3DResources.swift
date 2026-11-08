@@ -14,9 +14,9 @@ enum Pet3DResources {
     }
 
     static let requiredFiles = [
-        "viewer.html", "viewer.js", "motion-player.js", "couple-scene.js",
+        "viewer.html", "viewer.js", "motion-player.js", "illustrated-motion.js", "couple-scene.js",
         "pet-props.js", "reward-items.js", "generation-prompt.txt",
-        "build-model.py", "pet-actions.py", "vendor/three.module.min.js",
+        "build-model.py", "pet-actions.py", "image-rig.py", "image-rig-prompt.txt", "vendor/three.module.min.js",
         "vendor/three.core.min.js", "vendor/GLTFLoader.js", "vendor/BufferGeometryUtils.js",
     ]
 }

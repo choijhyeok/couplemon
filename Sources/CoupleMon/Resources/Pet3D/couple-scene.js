@@ -16,6 +16,9 @@ function dispose(root) {
 export class CoupleScene {
   constructor(scene, pivot, model, player, onFinish) {
     Object.assign(this, { scene, pivot, model, player, onFinish });
+    this.illustrated = false;
+    model.traverse(o => { if (o.userData.couplemon_render_mode === 'illustrated') this.illustrated = true; });
+    this.imageHead = this.findImageHead(model);
     this.partner = null; this.url = null; this.pending = null; this.active = null;
     this.lastID = null; this.completed = 0; this.savedPose = [];
     const shape = new THREE.Shape();
@@ -42,11 +45,17 @@ export class CoupleScene {
       const extent = Math.max(size.x, size.y, size.z);
       if (!Number.isFinite(extent) || extent <= 0) { dispose(gltf.scene); return; }
       const normalized = new THREE.Group();
+      let illustrated = false;
+      gltf.scene.traverse(o => { if (o.userData.couplemon_render_mode === 'illustrated') illustrated = true; });
+      if (illustrated) gltf.scene.traverse(o => {
+        for (const m of [o.material].flat().filter(Boolean)) m.toneMapped = false;
+      });
       normalized.add(gltf.scene);
       normalized.scale.setScalar(1.9 / extent);
       normalized.position.copy(bounds.getCenter(new THREE.Vector3())).multiplyScalar(-1.9 / extent);
       const pivot = new THREE.Group(); pivot.add(normalized); this.scene.add(pivot);
-      this.partner = { pivot, model: gltf.scene, player: new PetMotionPlayer(gltf.scene, gltf.animations) };
+      this.partner = { pivot, model: gltf.scene, illustrated, imageHead: this.findImageHead(gltf.scene),
+        player: new PetMotionPlayer(gltf.scene, gltf.animations) };
       this.faceA = this.face(this.model, this.pivot);
       this.faceB = this.face(this.partner.model, pivot);
       this.contactA = this.contact(this.model);
@@ -62,6 +71,17 @@ export class CoupleScene {
     const point = box.getCenter(new THREE.Vector3()); point.z = box.max.z;
     if (!head) point.y = box.min.y + (box.max.y - box.min.y) * 0.72;
     return pivot.worldToLocal(point);
+  }
+  findImageHead(model) {
+    let head = null;
+    model.traverse(node => {
+      const radius = node.userData.couplemon_head_radius;
+      if (node.userData.couplemon_render_mode === 'illustrated' && Number.isFinite(radius) && radius > 0) head = { node, radius };
+    });
+    return head;
+  }
+  cheekWidth(head) {
+    return head ? head.radius * head.node.getWorldScale(new THREE.Vector3()).x : 0;
   }
   contact(model, hand = false) {
     const explicit = model.getObjectByName(hand ? 'pet_anchor_hand_r' : 'pet_anchor_face');
@@ -90,6 +110,9 @@ export class CoupleScene {
     const node = model.getObjectByName(name);
     if (!node) return;
     this.savedPose.push([node, node.quaternion.clone()]);
+    if ((model === this.model && this.illustrated) || (model === this.partner?.model && this.partner.illustrated)) {
+      x *= 0.3; z *= 0.3;
+    }
     node.rotateX(x); node.rotateZ(z);
   }
   finish() {
@@ -133,8 +156,8 @@ export class CoupleScene {
     const faceHeight = Math.max(this.faceA.y, this.faceB.y);
     this.pivot.position.y += (faceHeight - this.faceA.y) * 0.67 * touch;
     other.pivot.position.y += (faceHeight - this.faceB.y) * 0.67 * touch;
-    this.pivot.rotation.set(0, Math.PI / 2 * approach, -0.06 * touch);
-    other.pivot.rotation.set(0, -Math.PI / 2 * approach, 0.06 * touch);
+    this.pivot.rotation.set(0, (this.illustrated ? 0.3 : Math.PI / 2) * approach, -0.06 * touch);
+    other.pivot.rotation.set(0, -(other.illustrated ? 0.3 : Math.PI / 2) * approach, 0.06 * touch);
     const step = Math.sin(t * 16) * 0.035 * approach * (1 - touch);
     this.pivot.position.y += Math.abs(step); other.pivot.position.y += Math.abs(step);
     for (const m of [this.model, other.model]) {
@@ -152,6 +175,13 @@ export class CoupleScene {
     this.scene.updateMatrixWorld(true);
     const pa = anchorA.getWorldPosition(new THREE.Vector3());
     const pb = anchorB.getWorldPosition(new THREE.Vector3());
+    if (kind !== 'highFive') {
+      // A front drawing touches at its cheek, rather than placing two face centers
+      // on top of each other as a volumetric side-on kiss would.
+      const amount = kind === 'hug' ? 0.65 : 0.9;
+      pa.x += this.cheekWidth(this.imageHead) * amount;
+      pb.x -= this.cheekWidth(other.imageHead) * amount;
+    }
     const correction = pb.clone().sub(pa).multiplyScalar(touch * 0.5);
     correction.x -= (kind === 'hug' ? 0.045 : 0.008) * touch;
     this.pivot.position.add(correction); other.pivot.position.sub(correction);

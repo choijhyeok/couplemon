@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { IllustratedMotion, isIllustrated } from './illustrated-motion.js';
 
 export class PetMotionPlayer {
   constructor(model, clips) {
     this.mixer = new THREE.AnimationMixer(model);
+    this.illustrated = isIllustrated(model) ? new IllustratedMotion(model) : null;
     this.clips = new Map(clips.map(clip => [clip.name.toLowerCase(), clip]));
     this.idle = this.clips.get('idle') || clips.find(clip => /idle|breath/i.test(clip.name)) || clips[0];
     this.name = 'idle';
@@ -24,6 +26,13 @@ export class PetMotionPlayer {
     this.name = name;
     this.started = now;
     this.nextRandomAt = this.randomEnabled && name === 'idle' ? now + this.randomInterval : Infinity;
+    if (this.illustrated) {
+      this.mixer.stopAllAction();
+      this.hasClip = true;
+      this.deadline = now + this.illustrated.duration(name);
+      this.illustrated.play(name);
+      return;
+    }
     const clip = this.clips.get(name.toLowerCase()) || (name === 'idle' ? this.idle : null);
     this.hasClip = !!clip;
     this.deadline = clip || name === 'idle' ? Infinity : now + 1.8;
@@ -58,7 +67,8 @@ export class PetMotionPlayer {
   }
   playRandom(now) {
     const basic = ['runningRight', 'runningLeft', 'waving', 'jumping', 'failed', 'waiting', 'running', 'review', 'lookAround'];
-    let choices = basic.filter(name => this.clips.has(name.toLowerCase()));
+    const candidates = this.illustrated ? ['waiting', 'lookAround', 'review', 'waving', 'failed'] : basic;
+    let choices = candidates.filter(name => this.clips.has(name.toLowerCase()));
     if (!choices.length) choices = basic;
     if (this.interaction) choices.push(this.interaction);
     const different = choices.filter(name => name !== this.lastRandomAction);
@@ -75,11 +85,13 @@ export class PetMotionPlayer {
     this.active = null;
     this.play('idle', this.now);
     this.mixer.update(0);
+    if (this.illustrated) this.illustrated.update(0, this.reduced);
   }
   update(dt, now) {
     this.now = now;
+    if (this.illustrated) this.illustrated.update(dt, this.reduced);
     if (this.reduced) return;
-    this.mixer.update(dt);
+    if (!this.illustrated) this.mixer.update(dt);
     if (now >= this.deadline) this.play('idle', now);
     if (this.randomEnabled && this.name === 'idle' && now >= this.nextRandomAt) this.playRandom(now);
   }

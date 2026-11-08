@@ -3,6 +3,7 @@
 
 Usage: python3 Checks/check-3d.py /path/to/Blender [--live] [--model /path/to/model.glb]
 --live additionally uses the signed-in Codex CLI for one image-to-3D generation.
+Use --image-input-only instead of a Blender path to check image paste/drop only.
 """
 import pathlib
 import plistlib
@@ -18,7 +19,7 @@ build = root / ".build/debug"
 objects = [p for p in (build / "CoupleMon.product/Objects.LinkFileList").read_text().splitlines()
            if pathlib.Path(p).name != "CoupleMonApp.swift.o"]
 executable = root / ".build/pet3d-check"
-subprocess.run(["swiftc", "-parse-as-library", "-I", str(build), str(root / "Checks/Pet3DCheck.swift"),
+subprocess.run(["swiftc", "-parse-as-library", "-I", str(build), "-I", str(build / "Modules"), str(root / "Checks/Pet3DCheck.swift"),
                 *objects, "-o", str(executable)], cwd=root, check=True)
 app = root / ".build/Pet3DCheck.app/Contents"
 (app / "MacOS").mkdir(parents=True, exist_ok=True)

@@ -23,7 +23,7 @@ objects = [p for p in (build / "CoupleMon.product/Objects.LinkFileList").read_te
 app = root / ".build/CouplePetCheck.app/Contents"
 (app / "MacOS").mkdir(parents=True, exist_ok=True)
 executable = app / "MacOS/couple-check"
-subprocess.run(["swiftc", "-parse-as-library", "-I", str(build), str(root / "Checks/CouplePetCheck.swift"), *objects, "-o", str(executable)], check=True)
+subprocess.run(["swiftc", "-parse-as-library", "-I", str(build), "-I", str(build / "Modules"), str(root / "Checks/CouplePetCheck.swift"), *objects, "-o", str(executable)], check=True)
 (app / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": "com.couplemon.couple-check", "CFBundleExecutable": "couple-check", "CFBundlePackageType": "APPL", "LSUIElement": True}))
 shutil.copytree(build / "CoupleMon_CoupleMon.bundle", app / "Resources/CoupleMon_CoupleMon.bundle", dirs_exist_ok=True)
 subprocess.run(["codesign", "--force", "--sign", "-", str(app.parent)], check=True)

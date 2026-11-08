@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import WebKit
+import UniformTypeIdentifiers
 @testable import CoupleMon
 
 @MainActor
@@ -15,7 +16,9 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             do {
                 try await checks()
-                print("PASS: GLB validation, library, selection restore, offline WebGL, rotation, local generation")
+                if !CommandLine.arguments.contains("--image-input-only") && !CommandLine.arguments.contains("--motion-review") {
+                    print("PASS: GLB validation, library, selection restore, offline WebGL, rotation, local generation")
+                }
                 cleanup()
                 NSApp.terminate(nil)
             } catch {
@@ -39,6 +42,12 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
         temporary = FileManager.default.temporaryDirectory.appendingPathComponent("pet3d-check-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
         defaults = UserDefaults(suiteName: suite)!
+        if let index = CommandLine.arguments.firstIndex(of: "--motion-review"), CommandLine.arguments.count > index + 1 {
+            try await reviewMotion(modelURL: URL(fileURLWithPath: CommandLine.arguments[index + 1]), screenshots: screenshots)
+            return
+        }
+        try await checkReferenceImages(root: root)
+        if CommandLine.arguments.contains("--image-input-only") { return }
         let library = Pet3DLibrary(directory: temporary.appendingPathComponent("3DCharacters"))
         let fixture: Data
         if let index = CommandLine.arguments.firstIndex(of: "--model"), CommandLine.arguments.count > index + 1 {
@@ -276,10 +285,13 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
         let stub = temporary.appendingPathComponent("stub-agent")
         try Data(Self.stub.utf8).write(to: stub)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stub.path)
-        for agent in Pet3DAgent.allCases {
+        for (mode, agent) in Pet3DGenerationMode.allCases.flatMap({ mode in Pet3DAgent.allCases.map { (mode, $0) } }) {
+            let reference = try Data(contentsOf: root.appendingPathComponent("Sources/CoupleMon/Resources/Emoticons/otter.png"))
+            try require(try PetImageMatte.prepare(reference) == reference, "Transparent original was altered")
             generator.start(image: try Data(contentsOf: root.appendingPathComponent("Sources/CoupleMon/Resources/Emoticons/otter.png")),
-                            name: "\(agent.title) export check", instructions: agent == .codex ? "REPAIR_CHECK" : "", agent: agent,
-                            executable: stub, blender: blender)
+                            name: "\(mode.title) · \(agent.title) export check",
+                            instructions: agent == .codex && mode == .volumetric ? "REPAIR_CHECK" : "", agent: agent,
+                            executable: stub, blender: blender, mode: mode)
             try await awaitGeneration(generator)
             if generator.result == nil, let workspace = generator.workspace {
                 let review = screenshots.appendingPathComponent("failed-\(UUID().uuidString)")
@@ -288,13 +300,17 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
             }
             try require(generator.result != nil, "\(agent.title) pipeline: \(generator.error ?? "")\n\(generator.log.suffix(6000))")
             try require(generator.completedStages == 4, "Incomplete stages")
-            if agent == .codex { try require(generator.log.contains("오류 수정"), "Automatic repair not exercised") }
+            if agent == .codex && mode == .volumetric { try require(generator.log.contains("오류 수정"), "Automatic repair not exercised") }
             guard let workspace = generator.workspace else { throw Failure.failed("No workspace") }
             for name in ["model.glb", "source.blend", "character.py", "preview.png"] {
                 try require(FileManager.default.fileExists(atPath: workspace.appendingPathComponent(name).path), "Missing \(name)")
             }
             try Pet3DLibrary.validateGeneratedActions(Data(contentsOf: workspace.appendingPathComponent("model.glb")))
-            print("PASS: \(agent.title) protocol, sandboxed Blender, validated GLB, source, preview, save")
+            print("PASS: \(mode.title), \(agent.title) protocol, sandboxed Blender, validated GLB, source, preview, save")
+            if mode == .illustrated, let asset = generator.result {
+                try require(try Data(contentsOf: workspace.appendingPathComponent("texture.png")) == reference, "Original texture not preserved")
+                try await checkIllustratedRenderer(library.modelURL(for: asset), screenshots: screenshots)
+            }
         }
         let slow = temporary.appendingPathComponent("slow-agent")
         try Data("#!/usr/bin/python3\nimport time\ntime.sleep(30)\n".utf8).write(to: slow)
@@ -329,6 +345,192 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
         }
         window.close()
     }
+    private func checkReferenceImages(root: URL) async throws {
+        let source = try Data(contentsOf: root.appendingPathComponent("Sources/CoupleMon/Resources/Emoticons/otter.png"))
+        let file = temporary.appendingPathComponent("참고 수달.png")
+        try source.write(to: file)
+        let fromFile = try PetReferenceImage.read(url: file)
+        try require(fromFile.suggestedName == "참고 수달", "Image file name not retained")
+        func verify(_ reference: PetReferenceImage) throws {
+            let bitmap = NSBitmapImageRep(data: reference.png)
+            try require(bitmap?.pixelsWide == 512 && bitmap?.pixelsHigh == 512, "Imported image canvas changed")
+            try require((bitmap?.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) < 0.01, "Image alpha was lost")
+        }
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setData(source, forType: .png)
+        try require(PetReferenceImage.canPaste(from: pasteboard), "PNG clipboard not recognized")
+        try verify(PetReferenceImage.read(pasteboard: pasteboard))
+        pasteboard.clearContents()
+        pasteboard.setData(NSImage(data: source)!.tiffRepresentation!, forType: .tiff)
+        try verify(PetReferenceImage.read(pasteboard: pasteboard))
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file as NSURL])
+        try require(PetReferenceImage.canPaste(from: pasteboard), "Finder image copy not recognized")
+        try require(try PetReferenceImage.read(pasteboard: pasteboard).suggestedName == "참고 수달", "Finder name was lost")
+
+        let inline = NSItemProvider(item: source as NSData, typeIdentifier: UTType.png.identifier)
+        try verify(await PetReferenceImage.read(providers: [inline]))
+        let bad = NSItemProvider(item: Data("invalid".utf8) as NSData, typeIdentifier: UTType.png.identifier)
+        try verify(await PetReferenceImage.read(providers: [bad, inline]))
+        let fileProvider = NSItemProvider(contentsOf: file)!
+        try verify(await PetReferenceImage.read(providers: [fileProvider]))
+        let text = NSItemProvider(item: "text" as NSString, typeIdentifier: UTType.plainText.identifier)
+        try require(!PetReferenceImage.accepts(text), "Text drop accepted as an image")
+        for invalid in [Data("not an image".utf8), Data(repeating: 0, count: PetReferenceImage.maximumBytes + 1)] {
+            do { _ = try PetReferenceImage.read(data: invalid); throw Failure.failed("Invalid/oversized image accepted") }
+            catch is Pet3DError { }
+        }
+        let large = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3072, pixelsHigh: 128,
+                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                     colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let normalized = try PetReferenceImage.read(data: large.representation(using: .png, properties: [:])!)
+        try require(NSBitmapImageRep(data: normalized.png)?.pixelsWide == 1536, "Import did not resize to 1536px")
+
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let target = PetImagePasteView(frame: .zero)
+        target.pasteboard = pasteboard
+        var pasted = 0
+        target.onPaste = { _ in pasted += 1 }
+        window.contentView = target
+        let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                                    windowNumber: window.windowNumber, context: nil, characters: "v",
+                                    charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9)!
+        try require(target.handle(event) == nil && pasted == 1, "Image Cmd-V not handled")
+        target.isEnabled = false
+        try require(target.handle(event) != nil && pasted == 1, "Paste bypasses disabled import")
+        target.isEnabled = true
+        pasteboard.clearContents()
+        pasteboard.setString("캐릭터 이름", forType: .string)
+        try require(!PetReferenceImage.canPaste(from: pasteboard), "Plain text clipboard treated as an image")
+        try require(target.handle(event) != nil && pasted == 1, "Normal text paste was intercepted")
+        do { _ = try PetReferenceImage.read(pasteboard: pasteboard); throw Failure.failed("Text clipboard accepted") }
+        catch is Pet3DError { }
+        window.contentView = nil
+        window.close()
+        // Exercise the real SwiftUI window and event monitor with a private clipboard.
+        let model = AppModel(characterURL: temporary.appendingPathComponent("reference.png"),
+                             petDirectory: temporary.appendingPathComponent("input-pet"),
+                             bundledPetDirectory: nil, defaults: defaults)
+        let generator = LocalPet3DGenerator(library: Pet3DLibrary(directory: temporary.appendingPathComponent("input-library")))
+        window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 840, height: 740),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = NSHostingView(rootView: Pet3DStudioView(model: model, generator: generator))
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        try await Task.sleep(for: .milliseconds(300))
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        guard let shortcut = descendants(window.contentView!).compactMap({ $0 as? PetImagePasteView }).first else {
+            throw Failure.failed("Studio did not mount image paste shortcut")
+        }
+        pasteboard.clearContents()
+        pasteboard.writeObjects([file as NSURL])
+        shortcut.pasteboard = pasteboard
+        let paste = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                    context: nil, characters: "v", charactersIgnoringModifiers: "v", isARepeat: false, keyCode: 9)!
+        NSApp.postEvent(paste, atStart: false)
+        try await Task.sleep(for: .milliseconds(500))
+        let fields = descendants(window.contentView!).compactMap { $0 as? NSTextField }
+        try require(fields.contains(where: { $0.stringValue == "참고 수달" }), "Studio Cmd-V did not update the selected image/name")
+        window.close()
+        print("PASS: PNG/TIFF clipboard, Finder copy, inline/file image drops, alpha, 1536px resize, invalid/20MB guards, Cmd-V and text fallback")
+        print("PASS: native Studio Cmd-V event updates the selected reference image")
+    }
+
+    private func checkIllustratedRenderer(_ modelURL: URL, screenshots: URL) async throws {
+        let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
+        config.setURLSchemeHandler(Pet3DSchemeHandler(modelURL: modelURL), forURLScheme: "couplemon-pet")
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 420, height: 420), configuration: config)
+        web.setValue(false, forKey: "drawsBackground")
+        window.contentView = web
+        window.setContentSize(NSSize(width: 420, height: 420))
+        web.load(URLRequest(url: URL(string: "couplemon-pet://character/viewer.html")!))
+        for _ in 0..<100 {
+            if try await js(web, "window.pet3D?.state.ready ?? false") as? Bool == true { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        try require(try await js(web, "window.pet3D?.state.illustrated ?? false") as? Bool == true, "2.5D metadata not recognized")
+        try require(try await js(web, "window.pet3D.state.clips.length") as? Int == 21, "2.5D clips not loaded")
+        try require(try await js(web, "window.pet3D.state.motion.eyeParts") as? Int == 8, "2.5D eye layers not loaded")
+        let beforeBreath = try await js(web, "window.pet3D.state.motion.breath") as? Double ?? -1
+        try await Task.sleep(for: .milliseconds(300))
+        try require(try await js(web, "window.pet3D.state.motion.breath") as? Double != beforeBreath, "Breathing did not advance")
+        try save(try await web.takeSnapshot(configuration: nil), to: screenshots.appendingPathComponent("illustrated-front.png"))
+        _ = try await js(web, """
+        {const c=document.querySelector('canvas');
+        c.dispatchEvent(new PointerEvent('pointerdown',{pointerId:1,clientX:30,clientY:80}));
+        c.dispatchEvent(new PointerEvent('pointermove',{pointerId:1,clientX:900,clientY:900}));
+        c.dispatchEvent(new PointerEvent('pointerup',{pointerId:1,clientX:900,clientY:900}));}
+        """)
+        try require(abs(try await js(web, "window.pet3D.state.yaw") as? Double ?? 99) <= 0.38, "2.5D yaw exceeds front-view range")
+        try require(abs(try await js(web, "window.pet3D.state.pitch") as? Double ?? 99) <= 0.2, "2.5D pitch exceeds front-view range")
+        _ = try await js(web, "window.pet3D.playAction('waving')")
+        try await Task.sleep(for: .milliseconds(650))
+        try save(try await web.takeSnapshot(configuration: nil), to: screenshots.appendingPathComponent("illustrated-wave.png"))
+        for _ in 0..<100 {
+            if (try await js(web, "window.pet3D.state.motion.blinks") as? Int ?? 0) > 0 { break }
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try require((try await js(web, "window.pet3D.state.motion.blinks") as? Int ?? 0) > 0, "Automatic blink did not run")
+        _ = try await js(web, "window.pet3D.setReducedMotion(true)")
+        let still = try await js(web, "JSON.stringify(window.pet3D.state.motion)") as? String
+        try await Task.sleep(for: .milliseconds(150))
+        try require(try await js(web, "JSON.stringify(window.pet3D.state.motion)") as? String == still, "Reduced motion did not freeze 2.5D driver")
+        print("PASS: offline 2.5D WebGL, 21 clips, bounded parallax, front and wave snapshots")
+    }
+    private func reviewMotion(modelURL: URL, screenshots: URL) async throws {
+        window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 420, height: 420),
+                          styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let config = WKWebViewConfiguration()
+        config.setURLSchemeHandler(Pet3DSchemeHandler(modelURL: modelURL), forURLScheme: "couplemon-pet")
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 420, height: 420), configuration: config)
+        web.setValue(false, forKey: "drawsBackground")
+        window.contentView = web
+        window.makeKeyAndOrderFront(nil)
+        web.load(URLRequest(url: URL(string: "couplemon-pet://character/viewer.html")!))
+        for _ in 0..<100 {
+            if try await js(web, "window.pet3D?.state.ready ?? false") as? Bool == true { break }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        _ = try await web.callAsyncJavaScript("""
+        const THREE = await import('three');
+        const { GLTFLoader } = await import('./vendor/GLTFLoader.js');
+        const { IllustratedMotion } = await import('./illustrated-motion.js');
+        const gltf = await new GLTFLoader().loadAsync('./model.glb');
+        const model = gltf.scene, driver = new IllustratedMotion(model, () => 0.5);
+        const scene = new THREE.Scene(); scene.add(model);
+        const renderer = new THREE.WebGLRenderer({ alpha:true, antialias:true, preserveDrawingBuffer:true });
+        renderer.setPixelRatio(devicePixelRatio); renderer.setSize(innerWidth,innerHeight);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        Object.assign(renderer.domElement.style,{position:'fixed',inset:0,zIndex:10});
+        document.body.append(renderer.domElement);
+        const box = new THREE.Box3().setFromObject(model), center = box.getCenter(new THREE.Vector3());
+        const extent = Math.max(...box.getSize(new THREE.Vector3()).toArray()) * 0.6;
+        const camera = new THREE.OrthographicCamera(-extent,extent,extent,-extent,0.01,100);
+        camera.position.copy(center).add(new THREE.Vector3(0,0,5)); camera.lookAt(center);
+        model.traverse(o => { for(const m of [o.material].flat().filter(Boolean)) m.toneMapped=false; });
+        const render=()=>renderer.render(scene,camera);
+        window.motionReview = { driver, render };
+        driver.update(0,true); render();
+        return driver.eyes.length;
+        """, arguments: [:], in: nil, contentWorld: .page)
+        try save(try await web.takeSnapshot(configuration: nil), to: screenshots.appendingPathComponent("motion-open.png"))
+        _ = try await js(web, "motionReview.driver.updateEyes(1,0,0); motionReview.render()")
+        try save(try await web.takeSnapshot(configuration: nil), to: screenshots.appendingPathComponent("motion-closed.png"))
+        _ = try await js(web, "motionReview.driver.updateEyes(0,0.8,0); motionReview.render()")
+        try save(try await web.takeSnapshot(configuration: nil), to: screenshots.appendingPathComponent("motion-gaze.png"))
+        _ = try await js(web, "motionReview.driver.play('waving'); for(let i=0;i<60;i++) motionReview.driver.update(1/60); motionReview.driver.updateEyes(0,0,0); motionReview.render()")
+        try save(try await web.takeSnapshot(configuration: nil), to: screenshots.appendingPathComponent("motion-wave.png"))
+        window.close()
+        print("PASS: native WebGL review of original eyes, closed lids, gaze and layered wave")
+    }
+
     private func checkExperience(model: AppModel, character: URL, petDirectory: URL) throws {
         try require(model.petProgress.experience == 0, "Initial XP")
         model.send("   ")
@@ -455,7 +657,13 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
         obj.parent = root
         obj.data.materials.append(material)
     '''
+    image_script = '''image_character(head=(0.49,0.26,0.22,0.19), neck=(0.49,0.44), face=(0.47,0.32), limbs=[
+      {"name":"pet_arm_l","pivot":(0.33,0.45),"tip":(0.36,0.52),"radius":0.065},
+      {"name":"pet_arm_r","pivot":(0.63,0.46),"tip":(0.57,0.52),"radius":0.065}],
+      eyes=[(0.35,0.207,0.422,0.276),(0.533,0.239,0.596,0.306)])'''
     if 'exec' in sys.argv:
+        if 'image_character(' in sys.argv[-1]:
+            script = image_script
         path = sys.argv[sys.argv.index('--output-last-message') + 1]
         if 'REPAIR_CHECK' in sys.argv[-1] and not pathlib.Path('repair-marker').exists():
             pathlib.Path('repair-marker').touch()
@@ -464,6 +672,8 @@ final class Pet3DCheck: NSObject, NSApplicationDelegate {
     else:
         request = json.loads(sys.stdin.readline())
         assert request['message']['content'][0]['source']['media_type'] == 'image/png'
+        if 'image_character(' in request['message']['content'][1]['text']:
+            script = image_script
         print(json.dumps({'type': 'result', 'is_error': False, 'structured_output': {'script': script}}))
     """#
 }

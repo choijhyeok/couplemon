@@ -27,7 +27,7 @@ if len(sys.argv) < 2:
 for executable in sys.argv[1:]:
     with tempfile.TemporaryDirectory(prefix="couplemon-actions-") as temporary:
         workspace = pathlib.Path(temporary)
-        for name in ["build-model.py", "pet-actions.py"]:
+        for name in ["build-model.py", "pet-actions.py", "image-rig.py"]:
             shutil.copyfile(resources / name, workspace / name)
         (workspace / "character.py").write_text(fixture)
         result = subprocess.run([str(pathlib.Path(executable).resolve()), "--background", "--factory-startup",

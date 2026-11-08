@@ -42,8 +42,8 @@ struct Pet3DTools {
 enum Pet3DPrompt {
     static let schema = #"{"type":"object","properties":{"script":{"type":"string"}},"required":["script"],"additionalProperties":false}"#
 
-    static func make(instructions: String, repair: String? = nil) throws -> String {
-        guard let url = Pet3DResources.url(for: "generation-prompt.txt") else {
+    static func make(instructions: String, repair: String? = nil, mode: Pet3DGenerationMode = .volumetric) throws -> String {
+        guard let url = Pet3DResources.url(for: mode == .illustrated ? "image-rig-prompt.txt" : "generation-prompt.txt") else {
             throw Pet3DError.message("3D 생성 프롬프트를 찾을 수 없습니다.")
         }
         var prompt = try String(contentsOf: url, encoding: .utf8)
@@ -55,6 +55,12 @@ enum Pet3DPrompt {
         }
         return prompt
     }
+}
+
+enum Pet3DGenerationMode: String, CaseIterable, Identifiable {
+    case illustrated, volumetric
+    var id: String { rawValue }
+    var title: String { self == .illustrated ? "원본 유지 · 2.5D" : "입체 재구성 · 3D" }
 }
 
 @MainActor
@@ -73,7 +79,8 @@ final class LocalPet3DGenerator: ObservableObject {
 
     init(library: Pet3DLibrary = Pet3DLibrary()) { self.library = library }
 
-    func start(image: Data, name: String, instructions: String, agent: Pet3DAgent, executable: URL, blender: URL) {
+    func start(image: Data, name: String, instructions: String, agent: Pet3DAgent, executable: URL, blender: URL,
+               mode: Pet3DGenerationMode = .volumetric) {
         guard !isRunning else { return }
         isRunning = true
         cancelled = false
@@ -86,7 +93,7 @@ final class LocalPet3DGenerator: ObservableObject {
             defer { self.isRunning = false; self.process = nil; self.task = nil }
             do {
                 try await self.generate(image: image, name: name, instructions: instructions,
-                                        agent: agent, executable: executable, blender: blender)
+                                        agent: agent, executable: executable, blender: blender, mode: mode)
             } catch {
                 self.error = self.cancelled ? nil : error.localizedDescription
                 self.stage = self.cancelled ? "생성 중지됨 · 다시 시작할 수 있습니다" : "생성 실패 · 로그 확인 후 다시 시도하세요"
@@ -107,15 +114,21 @@ final class LocalPet3DGenerator: ObservableObject {
     }
 
     private func generate(image: Data, name: String, instructions: String, agent: Pet3DAgent,
-                          executable: URL, blender: URL) async throws {
+                          executable: URL, blender: URL, mode: Pet3DGenerationMode) async throws {
         let root = library.directory.deletingLastPathComponent().appendingPathComponent("3DWorkspaces", isDirectory: true)
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
         workspace = root
         try image.write(to: root.appendingPathComponent("reference.png"), options: .atomic)
+        if mode == .illustrated {
+            mark("1/4 · 원본 텍스처 배경 분리 중", completed: 0)
+            let texture = try await Task.detached(priority: .userInitiated) { try PetImageMatte.prepare(image) }.value
+            try Task.checkCancellation()
+            try texture.write(to: root.appendingPathComponent("texture.png"), options: .atomic)
+        }
         try Data(Pet3DPrompt.schema.utf8).write(to: root.appendingPathComponent("schema.json"))
-        for file in ["build-model", "pet-actions"] {
+        for file in ["build-model", "pet-actions", "image-rig"] {
             guard let templateURL = Pet3DResources.url(for: "\(file).py") else {
                 throw Pet3DError.message("3D 동작 생성 파일을 찾을 수 없습니다.")
             }
@@ -125,7 +138,7 @@ final class LocalPet3DGenerator: ObservableObject {
         for attempt in 1...2 {
             try Task.checkCancellation()
             mark(attempt == 1 ? "1/4 · \(agent.title) 이미지 분석·모델링 코드 생성 중" : "1/4 · \(agent.title) 오류 수정 중 (1회)", completed: 0)
-            let prompt = try Pet3DPrompt.make(instructions: instructions, repair: repair)
+            let prompt = try Pet3DPrompt.make(instructions: instructions, repair: repair, mode: mode)
             try Data(prompt.utf8).write(to: root.appendingPathComponent("prompt.txt"))
             let script = try await generateScript(agent: agent, executable: executable, image: image,
                                                   prompt: prompt, root: root, attempt: attempt)

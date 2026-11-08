@@ -13,6 +13,7 @@ let requestedAction = 'idle', requestedEvent = null;
 let reward = null;
 let randomEnabled = false, randomInterval = 5;
 let couple, partnerURL = null, togetherEvent = null;
+let illustrated = false;
 const nowSeconds = () => performance.now() / 1000;
 function syncRewardLock() {
   if (!player) return;
@@ -43,7 +44,8 @@ window.pet3D = {
     props?.startLetter(event, nowSeconds());
     return true;
   },
-  get state() { return { ready, yaw, pitch, animated: !!player?.idle, action: player?.name || 'idle',
+  get state() { return { ready, yaw, pitch, illustrated, animated: !!player?.idle, action: player?.name || 'idle',
+    motion: player?.illustrated?.state || null,
     clips: player ? [...player.clips.keys()] : [], decorations: props?.unlocked || [], letterVisible: props?.letter.visible || false,
     rewardLevel: props?.rewardItem.reward?.level || null, rewardKind: props?.rewardItem.reward?.kind || null,
     randomEnabled: player?.randomEnabled || false, randomInterval: player?.randomInterval || randomInterval,
@@ -80,6 +82,12 @@ try {
   resize();
   const gltf = await new GLTFLoader().loadAsync('./model.glb');
   model = gltf.scene;
+  model.traverse(object => {
+    if (object.userData.couplemon_render_mode === 'illustrated') illustrated = true;
+  });
+  if (illustrated) model.traverse(object => {
+    for (const material of [object.material].flat().filter(Boolean)) material.toneMapped = false;
+  });
   const bounds = new THREE.Box3().setFromObject(model);
   const size = bounds.getSize(new THREE.Vector3());
   const extent = Math.max(size.x, size.y, size.z);
@@ -115,11 +123,15 @@ try {
     if (e.isTrusted) renderer.domElement.setPointerCapture(e.pointerId);
   });
   renderer.domElement.addEventListener('pointermove', e => {
-    if (!pointer || pointer.id !== e.pointerId) return;
+    if (!pointer) {
+      player.illustrated?.setLook(e.clientX / Math.max(innerWidth, 1) * 2 - 1, 1 - e.clientY / Math.max(innerHeight, 1) * 2);
+      return;
+    }
+    if (pointer.id !== e.pointerId) return;
     const dx = e.clientX - pointer.x, dy = e.clientY - pointer.y;
     pointer.moved ||= Math.hypot(dx, dy) > 5;
-    yaw = pointer.yaw + dx * 0.018;
-    pitch = THREE.MathUtils.clamp(pointer.pitch + dy * 0.008, -0.55, 0.55);
+    yaw = illustrated ? THREE.MathUtils.clamp(pointer.yaw + dx * 0.008, -0.38, 0.38) : pointer.yaw + dx * 0.018;
+    pitch = THREE.MathUtils.clamp(pointer.pitch + dy * 0.008, illustrated ? -0.2 : -0.55, illustrated ? 0.2 : 0.55);
   });
   renderer.domElement.addEventListener('pointerup', e => {
     if (pointer?.id !== e.pointerId) return;
@@ -127,6 +139,7 @@ try {
     pointer = null;
   });
   renderer.domElement.addEventListener('pointercancel', () => { pointer = null; });
+  renderer.domElement.addEventListener('pointerleave', () => player.illustrated?.setLook(null));
   let previous = performance.now() / 1000, lastFrame = previous;
   function draw(ms) {
     requestAnimationFrame(draw);
@@ -137,7 +150,7 @@ try {
     couple.restorePose();
     player.update(dt, now);
     const fallback = player.fallback(now);
-    pivot.position.y = reducedMotion ? 0 : Math.sin(now * 2.1) * 0.026;
+    pivot.position.y = reducedMotion || illustrated ? 0 : Math.sin(now * 2.1) * 0.026;
     pivot.position.y += fallback.y;
     pivot.rotation.set(pitch, yaw, fallback.z);
     props.update(now, reducedMotion, dt, player.name);
